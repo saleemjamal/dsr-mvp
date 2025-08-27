@@ -15,7 +15,9 @@ import {
   Package,
   FileText,
   Menu,
-  RotateCcw
+  RotateCcw,
+  Calculator,
+  CheckSquare
 } from "lucide-react"
 
 const navigation = [
@@ -53,6 +55,16 @@ const navigation = [
     name: "Returns",
     href: "/returns",
     icon: RotateCcw,
+  },
+  {
+    name: "Cash Management",
+    href: "/cash-management",
+    icon: Calculator,
+  },
+  {
+    name: "Approvals",
+    href: "/approvals",
+    icon: CheckSquare,
   },
   {
     name: "Customers",
