@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,54 +10,39 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { CheckCircle, XCircle, Clock, ArrowRight, IndianRupee, User, Calendar, FileText, Edit } from "lucide-react"
+import { CheckCircle, XCircle, Clock, ArrowRight, IndianRupee, User, Calendar, Loader2, Edit } from "lucide-react"
 import { toast } from "sonner"
-
-// Mock pending approvals data
-const mockPendingApprovals = [
-  {
-    id: "1",
-    type: "transfer",
-    title: "Cash Transfer Request",
-    requestedAmount: 5000,
-    currentBalances: { salesCash: 15050, pettyCash: 1800 },
-    reason: "Petty cash running low for daily operations and change fund replenishment",
-    requestedBy: "Manager A",
-    requestDate: "2025-01-22T09:30:00Z",
-    priority: "high"
-  },
-  {
-    id: "2", 
-    type: "transfer",
-    title: "Cash Transfer Request",
-    requestedAmount: 2000,
-    currentBalances: { salesCash: 15050, pettyCash: 1800 },
-    reason: "Change fund replenishment for weekend operations",
-    requestedBy: "Manager B", 
-    requestDate: "2025-01-22T14:20:00Z",
-    priority: "medium"
-  },
-  {
-    id: "3",
-    type: "expense",
-    title: "Expense Approval", 
-    amount: 750,
-    category: "Office Supplies",
-    description: "Printer cartridges and stationery",
-    requestedBy: "Store Assistant",
-    requestDate: "2025-01-22T11:45:00Z",
-    priority: "low"
-  }
-]
+import { getPendingApprovals, approveTransfer, rejectTransfer, type CashTransfer } from "@/lib/cash-service"
+import { useAuth } from "@/contexts/auth-context"
 
 export default function ApprovalsPage() {
-  const [approvals, setApprovals] = useState(mockPendingApprovals)
-  const [selectedApproval, setSelectedApproval] = useState(null)
+  const { profile } = useAuth()
+  const [transfers, setTransfers] = useState<CashTransfer[]>([])
+  const [selectedTransfer, setSelectedTransfer] = useState<CashTransfer | null>(null)
   const [loading, setLoading] = useState("")
+  const [initialLoading, setInitialLoading] = useState(true)
   const [approvalData, setApprovalData] = useState({
     approvedAmount: '',
     notes: ''
   })
+
+  // Load pending transfers
+  useEffect(() => {
+    const loadTransfers = async () => {
+      try {
+        setInitialLoading(true)
+        const data = await getPendingApprovals()
+        setTransfers(data)
+      } catch (error) {
+        console.error('Error loading pending approvals:', error)
+        toast.error('Failed to load pending approvals')
+      } finally {
+        setInitialLoading(false)
+      }
+    }
+
+    loadTransfers()
+  }, [])
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -77,60 +62,33 @@ export default function ApprovalsPage() {
     return <Badge variant={config.variant}>{config.text}</Badge>
   }
 
-  const getTypeBadge = (type: string) => {
-    const variants = {
-      transfer: { variant: "default" as const, text: "Transfer", icon: ArrowRight },
-      expense: { variant: "secondary" as const, text: "Expense", icon: FileText }
-    }
-    
-    const config = variants[type as keyof typeof variants]
-    const IconComponent = config.icon
-    
-    return (
-      <Badge variant={config.variant}>
-        <IconComponent className="h-3 w-3 mr-1" />
-        {config.text}
-      </Badge>
-    )
-  }
-
-  const handleApproval = async (approvalId: string, action: 'approve' | 'reject', modifiedAmount?: number) => {
-    setLoading(approvalId)
+  const handleApproval = async (transferId: string, action: 'approve' | 'reject', modifiedAmount?: number) => {
+    setLoading(transferId)
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      const transfer = transfers.find(t => t.id === transferId)
+      if (!transfer) return
 
-      const approval = approvals.find(a => a.id === approvalId)
-      if (!approval) return
-
-      const actionData = {
-        approvalId,
-        action,
-        originalAmount: approval.type === 'transfer' ? approval.requestedAmount : approval.amount,
-        approvedAmount: modifiedAmount || (approval.type === 'transfer' ? approval.requestedAmount : approval.amount),
-        notes: approvalData.notes,
-        approvedBy: 'current-aic-user', // TODO: Get from auth context
-        approvedAt: new Date().toISOString()
+      if (action === 'approve') {
+        const approvedAmount = modifiedAmount || transfer.requested_amount
+        await approveTransfer(transferId, approvedAmount, approvalData.notes)
+        
+        const amountText = modifiedAmount && modifiedAmount !== transfer.requested_amount 
+          ? `${formatCurrency(modifiedAmount)} (modified from ${formatCurrency(transfer.requested_amount)})`
+          : formatCurrency(transfer.requested_amount)
+        
+        toast.success(`Cash transfer approved for ${amountText}`)
+      } else {
+        await rejectTransfer(transferId, approvalData.notes || 'Request rejected')
+        toast.success('Cash transfer request rejected')
       }
-
-      console.log('Processing approval:', actionData)
       
       // Remove from pending list
-      setApprovals(prev => prev.filter(a => a.id !== approvalId))
+      setTransfers(prev => prev.filter(t => t.id !== transferId))
       
-      if (action === 'approve') {
-        const amountText = modifiedAmount && modifiedAmount !== (approval.type === 'transfer' ? approval.requestedAmount : approval.amount) 
-          ? `${formatCurrency(modifiedAmount)} (modified from ${formatCurrency(approval.type === 'transfer' ? approval.requestedAmount : approval.amount)})`
-          : formatCurrency(approval.type === 'transfer' ? approval.requestedAmount : approval.amount)
-        
-        toast.success(`${approval.type === 'transfer' ? 'Transfer' : 'Expense'} approved for ${amountText}`)
-      } else {
-        toast.success(`${approval.type === 'transfer' ? 'Transfer' : 'Expense'} request rejected`)
-      }
-
       // Reset form
       setApprovalData({ approvedAmount: '', notes: '' })
-      setSelectedApproval(null)
+      setSelectedTransfer(null)
 
     } catch (error) {
       toast.error("Failed to process approval. Please try again.")
@@ -139,18 +97,40 @@ export default function ApprovalsPage() {
     }
   }
 
-  const handleModifyAndApprove = async (approvalId: string) => {
+  const handleModifyAndApprove = async (transferId: string) => {
     const modifiedAmount = parseFloat(approvalData.approvedAmount)
     if (isNaN(modifiedAmount) || modifiedAmount <= 0) {
       toast.error("Please enter a valid approved amount")
       return
     }
 
-    await handleApproval(approvalId, 'approve', modifiedAmount)
+    await handleApproval(transferId, 'approve', modifiedAmount)
   }
 
-  const transferApprovals = approvals.filter(a => a.type === 'transfer')
-  const expenseApprovals = approvals.filter(a => a.type === 'expense')
+  // Check if user is Super User
+  if (profile?.role !== 'super_user') {
+    return (
+      <div className="flex min-h-screen">
+        <aside className="hidden lg:block w-64 border-r">
+          <Sidebar />
+        </aside>
+        <div className="flex-1">
+          <Header />
+          <main className="p-6">
+            <Card>
+              <CardContent className="text-center py-8">
+                <XCircle className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">Access Denied</h3>
+                <p className="text-muted-foreground">
+                  Only Super Users can access the approvals page.
+                </p>
+              </CardContent>
+            </Card>
+          </main>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -165,15 +145,15 @@ export default function ApprovalsPage() {
           {/* Page Header */}
           <div className="flex items-center justify-between mb-8">
             <div>
-              <h2 className="text-3xl font-bold tracking-tight">Approvals</h2>
+              <h2 className="text-3xl font-bold tracking-tight">Cash Transfer Approvals</h2>
               <p className="text-muted-foreground">
-                Review and approve pending transfer requests and expenses
+                Review and approve pending cash transfer requests from stores
               </p>
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="secondary" className="text-sm">
                 <Clock className="h-3 w-3 mr-1" />
-                {approvals.length} Pending
+                {transfers.length} Pending
               </Badge>
             </div>
           </div>
@@ -182,26 +162,13 @@ export default function ApprovalsPage() {
           <div className="grid gap-4 md:grid-cols-3 mb-8">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Cash Transfers</CardTitle>
+                <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
                 <ArrowRight className="h-4 w-4 text-orange-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-orange-600">{transferApprovals.length}</div>
+                <div className="text-2xl font-bold text-orange-600">{transfers.length}</div>
                 <p className="text-xs text-muted-foreground">
-                  {formatCurrency(transferApprovals.reduce((sum, t) => sum + t.requestedAmount, 0))} total requested
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Expense Approvals</CardTitle>
-                <FileText className="h-4 w-4 text-blue-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-blue-600">{expenseApprovals.length}</div>
-                <p className="text-xs text-muted-foreground">
-                  {formatCurrency(expenseApprovals.reduce((sum, e) => sum + e.amount, 0))} total amount
+                  {formatCurrency(transfers.reduce((sum, t) => sum + t.requested_amount, 0))} total requested
                 </p>
               </CardContent>
             </Card>
@@ -213,122 +180,126 @@ export default function ApprovalsPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-red-600">
-                  {approvals.filter(a => a.priority === 'high').length}
+                  {transfers.filter(t => t.priority === 'high').length}
                 </div>
                 <p className="text-xs text-muted-foreground">Requires immediate attention</p>
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Average Amount</CardTitle>
+                <IndianRupee className="h-4 w-4 text-blue-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-blue-600">
+                  {transfers.length > 0 
+                    ? formatCurrency(transfers.reduce((sum, t) => sum + t.requested_amount, 0) / transfers.length)
+                    : formatCurrency(0)
+                  }
+                </div>
+                <p className="text-xs text-muted-foreground">Per request</p>
+              </CardContent>
+            </Card>
           </div>
 
-          {/* Pending Approvals */}
-          <div className="space-y-4">
-            {approvals.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <CheckCircle className="mx-auto h-12 w-12 text-green-500 mb-4" />
-                  <h3 className="text-lg font-medium mb-2">All Caught Up!</h3>
-                  <p className="text-muted-foreground">No pending approvals at this time.</p>
-                </CardContent>
-              </Card>
-            ) : (
-              approvals.map((approval) => (
-                <Card key={approval.id} className={approval.priority === 'high' ? 'border-red-200' : ''}>
+          {initialLoading ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <Loader2 className="mx-auto h-12 w-12 animate-spin text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">Loading pending transfers...</p>
+              </CardContent>
+            </Card>
+          ) : transfers.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <CheckCircle className="mx-auto h-12 w-12 text-green-500 mb-4" />
+                <h3 className="text-lg font-medium mb-2">All Caught Up!</h3>
+                <p className="text-muted-foreground">No pending transfer requests at this time.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {transfers.map((transfer) => (
+                <Card key={transfer.id} className={transfer.priority === 'high' ? 'border-red-200' : ''}>
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        {getTypeBadge(approval.type)}
+                        <Badge variant="default">
+                          <ArrowRight className="h-3 w-3 mr-1" />
+                          Cash Transfer
+                        </Badge>
                         <div>
-                          <CardTitle className="text-lg">{approval.title}</CardTitle>
+                          <CardTitle className="text-lg">Cash Transfer Request</CardTitle>
                           <CardDescription>
-                            Requested by {approval.requestedBy} • {new Date(approval.requestDate).toLocaleDateString('en-IN')}
+                            Requested by {transfer.requested_by} • {transfer.request_date ? new Date(transfer.request_date).toLocaleDateString('en-IN') : 'Recently'}
                           </CardDescription>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {getPriorityBadge(approval.priority)}
+                        {getPriorityBadge(transfer.priority)}
                       </div>
                     </div>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
                       
-                      {/* Transfer-specific content */}
-                      {approval.type === 'transfer' && (
-                        <>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-muted rounded-lg">
-                            <div>
-                              <p className="text-sm font-medium">Requested Amount</p>
-                              <p className="text-lg font-bold text-orange-600">
-                                {formatCurrency(approval.requestedAmount)}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium">Sales Cash Available</p>
-                              <p className="text-lg font-bold text-green-600">
-                                {formatCurrency(approval.currentBalances.salesCash)}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium">Current Petty Cash</p>
-                              <p className="text-lg font-bold text-blue-600">
-                                {formatCurrency(approval.currentBalances.pettyCash)}
-                              </p>
-                            </div>
-                          </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-muted rounded-lg">
+                        <div>
+                          <p className="text-sm font-medium">Requested Amount</p>
+                          <p className="text-lg font-bold text-orange-600">
+                            {formatCurrency(transfer.requested_amount)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">Sales Cash Balance</p>
+                          <p className="text-lg font-bold text-green-600">
+                            {formatCurrency(transfer.sales_cash_balance || 0)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">Petty Cash Balance</p>
+                          <p className="text-lg font-bold text-blue-600">
+                            {formatCurrency(transfer.petty_cash_balance || 0)}
+                          </p>
+                        </div>
+                      </div>
 
-                          <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                            <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">After Transfer</h4>
-                            <div className="flex items-center justify-between text-sm">
-                              <span>Sales Cash: {formatCurrency(approval.currentBalances.salesCash - approval.requestedAmount)}</span>
-                              <ArrowRight className="h-4 w-4 text-blue-600" />
-                              <span>Petty Cash: {formatCurrency(approval.currentBalances.pettyCash + approval.requestedAmount)}</span>
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      {/* Expense-specific content */}
-                      {approval.type === 'expense' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
-                          <div>
-                            <p className="text-sm font-medium">Amount</p>
-                            <p className="text-lg font-bold text-blue-600">{formatCurrency(approval.amount)}</p>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium">Category</p>
-                            <p className="font-medium">{approval.category}</p>
+                      {(transfer.sales_cash_balance || transfer.petty_cash_balance) && (
+                        <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                          <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">After Transfer</h4>
+                          <div className="flex items-center justify-between text-sm">
+                            <span>Sales Cash: {formatCurrency((transfer.sales_cash_balance || 0) - transfer.requested_amount)}</span>
+                            <ArrowRight className="h-4 w-4 text-blue-600" />
+                            <span>Petty Cash: {formatCurrency((transfer.petty_cash_balance || 0) + transfer.requested_amount)}</span>
                           </div>
                         </div>
                       )}
 
-                      {/* Reason/Description */}
                       <div>
-                        <p className="text-sm font-medium mb-2">
-                          {approval.type === 'transfer' ? 'Reason for Transfer' : 'Description'}
-                        </p>
+                        <p className="text-sm font-medium mb-2">Reason for Transfer</p>
                         <p className="text-sm text-muted-foreground bg-muted p-3 rounded">
-                          {approval.type === 'transfer' ? approval.reason : approval.description}
+                          {transfer.reason}
                         </p>
                       </div>
 
-                      {/* Action Buttons */}
                       <div className="flex justify-end space-x-2 pt-4 border-t">
                         <Button
                           variant="outline"
-                          onClick={() => handleApproval(approval.id, 'reject')}
-                          disabled={loading === approval.id}
+                          onClick={() => handleApproval(transfer.id!, 'reject')}
+                          disabled={loading === transfer.id}
                         >
                           <XCircle className="mr-2 h-4 w-4" />
                           Reject
                         </Button>
 
                         <Button
-                          onClick={() => handleApproval(approval.id, 'approve')}
-                          disabled={loading === approval.id}
+                          onClick={() => handleApproval(transfer.id!, 'approve')}
+                          disabled={loading === transfer.id}
                         >
-                          {loading === approval.id ? (
+                          {loading === transfer.id ? (
                             <>
-                              <CheckCircle className="mr-2 h-4 w-4 animate-spin" />
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                               Processing...
                             </>
                           ) : (
@@ -339,79 +310,77 @@ export default function ApprovalsPage() {
                           )}
                         </Button>
 
-                        {approval.type === 'transfer' && (
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button 
-                                variant="secondary"
-                                onClick={() => {
-                                  setSelectedApproval(approval)
-                                  setApprovalData({ 
-                                    approvedAmount: approval.requestedAmount.toString(), 
-                                    notes: '' 
-                                  })
-                                }}
-                              >
-                                <Edit className="mr-2 h-4 w-4" />
-                                Modify & Approve
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className="max-w-md">
-                              <DialogHeader>
-                                <DialogTitle>Modify Transfer Amount</DialogTitle>
-                                <DialogDescription>
-                                  Adjust the transfer amount and add approval notes
-                                </DialogDescription>
-                              </DialogHeader>
-                              <div className="space-y-4">
-                                <div className="space-y-2">
-                                  <Label htmlFor="approved_amount">Approved Amount</Label>
-                                  <div className="relative">
-                                    <IndianRupee className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                                    <Input
-                                      id="approved_amount"
-                                      type="number"
-                                      placeholder={approval.requestedAmount.toString()}
-                                      value={approvalData.approvedAmount}
-                                      onChange={(e) => setApprovalData(prev => ({ ...prev, approvedAmount: e.target.value }))}
-                                      className="pl-10"
-                                    />
-                                  </div>
-                                  <p className="text-xs text-muted-foreground">
-                                    Originally requested: {formatCurrency(approval.requestedAmount)}
-                                  </p>
-                                </div>
-
-                                <div className="space-y-2">
-                                  <Label htmlFor="approval_notes">Approval Notes</Label>
-                                  <Textarea
-                                    id="approval_notes"
-                                    placeholder="Reason for amount modification..."
-                                    value={approvalData.notes}
-                                    onChange={(e) => setApprovalData(prev => ({ ...prev, notes: e.target.value }))}
-                                    className="min-h-[80px]"
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button 
+                              variant="secondary"
+                              onClick={() => {
+                                setSelectedTransfer(transfer)
+                                setApprovalData({ 
+                                  approvedAmount: transfer.requested_amount.toString(), 
+                                  notes: '' 
+                                })
+                              }}
+                            >
+                              <Edit className="mr-2 h-4 w-4" />
+                              Modify & Approve
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-md">
+                            <DialogHeader>
+                              <DialogTitle>Modify Transfer Amount</DialogTitle>
+                              <DialogDescription>
+                                Adjust the transfer amount and add approval notes
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="approved_amount">Approved Amount</Label>
+                                <div className="relative">
+                                  <IndianRupee className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                                  <Input
+                                    id="approved_amount"
+                                    type="number"
+                                    placeholder={transfer.requested_amount.toString()}
+                                    value={approvalData.approvedAmount}
+                                    onChange={(e) => setApprovalData(prev => ({ ...prev, approvedAmount: e.target.value }))}
+                                    className="pl-10"
                                   />
                                 </div>
-
-                                <div className="flex justify-end space-x-2">
-                                  <Button variant="outline" onClick={() => setSelectedApproval(null)}>
-                                    Cancel
-                                  </Button>
-                                  <Button onClick={() => handleModifyAndApprove(approval.id)}>
-                                    Approve Modified Amount
-                                  </Button>
-                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  Originally requested: {formatCurrency(transfer.requested_amount)}
+                                </p>
                               </div>
-                            </DialogContent>
-                          </Dialog>
-                        )}
+
+                              <div className="space-y-2">
+                                <Label htmlFor="approval_notes">Approval Notes</Label>
+                                <Textarea
+                                  id="approval_notes"
+                                  placeholder="Reason for amount modification..."
+                                  value={approvalData.notes}
+                                  onChange={(e) => setApprovalData(prev => ({ ...prev, notes: e.target.value }))}
+                                  className="min-h-[80px]"
+                                />
+                              </div>
+
+                              <div className="flex justify-end space-x-2">
+                                <Button variant="outline" onClick={() => setSelectedTransfer(null)}>
+                                  Cancel
+                                </Button>
+                                <Button onClick={() => handleModifyAndApprove(transfer.id!)}>
+                                  Approve Modified Amount
+                                </Button>
+                              </div>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </main>
       </div>
     </div>

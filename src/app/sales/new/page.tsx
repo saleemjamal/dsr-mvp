@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
@@ -13,74 +13,92 @@ import { Textarea } from "@/components/ui/textarea"
 import { ArrowLeft, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
+import { createMultipleSales } from "@/lib/sales-service"
+import { useAuth } from "@/contexts/auth-context"
+import { useStore } from "@/contexts/store-context"
+import type { Store } from "@/lib/store-service"
 
-// Mock stores data - replace with real data from Supabase later
-const mockStores = [
-  { id: "1", store_code: "CBD", store_name: "CBD Store" },
-  { id: "2", store_code: "FSN", store_name: "Fashion Store" },
-  { id: "3", store_code: "HOME", store_name: "Home Store" },
-]
-
-const paymentMethods = [
-  { value: "cash", label: "Cash" },
-  { value: "credit_card", label: "Credit Card" },
-  { value: "upi", label: "UPI" },
-  { value: "gift_voucher", label: "Gift Voucher" },
+const tenderTypes = [
+  { value: "cash", label: "Cash", icon: "₹" },
+  { value: "credit_card", label: "Credit Card", icon: "💳" },
+  { value: "upi", label: "UPI", icon: "📱" },
+  { value: "gift_voucher", label: "Gift Voucher", icon: "🎁" },
+  { value: "bank_transfer", label: "Bank Transfer", icon: "🏦" },
 ]
 
 export default function NewSalePage() {
   const router = useRouter()
+  const { profile } = useAuth()
+  const { currentStore, accessibleStores, canAccessMultipleStores } = useStore()
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
-    store_id: '',
-    amount: '',
-    tender_type: '',
+    store_id: currentStore?.id || '',
+    tenderAmounts: {} as Record<string, string>, // Store amounts for each tender type
     notes: ''
   })
+
+  // Set initial store when currentStore or accessibleStores change
+  useEffect(() => {
+    if (!canAccessMultipleStores && currentStore) {
+      // Single store users: auto-select their assigned store
+      setFormData(prev => ({ ...prev, store_id: currentStore.id }))
+    } else if (canAccessMultipleStores && accessibleStores.length > 0 && !formData.store_id) {
+      // Multi-store users: select first available store if none selected
+      setFormData(prev => ({ ...prev, store_id: accessibleStores[0].id }))
+    }
+  }, [currentStore, accessibleStores, canAccessMultipleStores, formData.store_id])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     // Basic validation
-    if (!formData.store_id || !formData.amount || !formData.tender_type) {
-      toast.error("Please fill in all required fields")
+    if (!formData.store_id) {
+      toast.error("Please select a store")
       return
     }
 
-    if (parseFloat(formData.amount) <= 0) {
-      toast.error("Amount must be greater than 0")
+    // Check if at least one tender type has an amount
+    const hasAnyAmount = Object.values(formData.tenderAmounts).some(amount => 
+      amount && parseFloat(amount) > 0
+    )
+    
+    if (!hasAnyAmount) {
+      toast.error("Please enter amount for at least one payment method")
       return
     }
 
     setLoading(true)
 
     try {
-      // Simulate API call - replace with actual Supabase call later
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      console.log('Creating sale:', {
-        store_id: formData.store_id,
-        amount: parseFloat(formData.amount),
-        tender_type: formData.tender_type,
-        notes: formData.notes,
-        sale_date: new Date().toISOString().split('T')[0]
-      })
+      // Process each tender type that has an amount
+      const sales = Object.entries(formData.tenderAmounts)
+        .filter(([_, amount]) => amount && parseFloat(amount) > 0)
+        .map(([tenderType, amount]) => ({
+          store_id: formData.store_id,
+          amount: parseFloat(amount),
+          tender_type: tenderType,
+          notes: formData.notes,
+          sale_date: new Date().toISOString().split('T')[0]
+        }))
 
-      toast.success("Sale created successfully!")
+      // Save to database
+      await createMultipleSales(sales)
+      
+      const totalAmount = sales.reduce((sum, sale) => sum + sale.amount, 0)
+      toast.success(`Sales created successfully! Total: ₹${totalAmount.toLocaleString('en-IN')}`)
       
       // Reset form
       setFormData({
         store_id: '',
-        amount: '',
-        tender_type: '',
+        tenderAmounts: {},
         notes: ''
       })
       
       // Redirect to sales page
       router.push('/sales')
-    } catch (error) {
-      console.error('Error creating sale:', error)
-      toast.error("Failed to create sale. Please try again.")
+    } catch (error: any) {
+      console.error('Error creating sales:', error)
+      toast.error(error.message || "Failed to create sales. Please try again.")
     } finally {
       setLoading(false)
     }
@@ -88,6 +106,25 @@ export default function NewSalePage() {
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
+  }
+
+  const handleTenderAmountChange = (tenderType: string, value: string) => {
+    // Only allow numbers and decimal point
+    if (value && !/^\d*\.?\d*$/.test(value)) return
+    
+    setFormData(prev => ({
+      ...prev,
+      tenderAmounts: {
+        ...prev.tenderAmounts,
+        [tenderType]: value
+      }
+    }))
+  }
+
+  const getTotalAmount = () => {
+    return Object.values(formData.tenderAmounts).reduce((sum, amount) => 
+      sum + (amount ? parseFloat(amount) : 0), 0
+    )
   }
 
   return (
@@ -128,8 +165,8 @@ export default function NewSalePage() {
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Store Selection */}
+                  {/* Store Selection - Only show dropdown for multi-store users */}
+                  {canAccessMultipleStores ? (
                     <div className="space-y-2">
                       <Label htmlFor="store">Store *</Label>
                       <Select 
@@ -140,50 +177,65 @@ export default function NewSalePage() {
                           <SelectValue placeholder="Select store" />
                         </SelectTrigger>
                         <SelectContent>
-                          {mockStores.map((store) => (
+                          {accessibleStores.map((store) => (
                             <SelectItem key={store.id} value={store.id}>
-                              {store.store_name}
+                              {store.store_name} ({store.store_code})
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
-
-                    {/* Amount */}
+                  ) : (
+                    /* Single store users - Show current store as read-only */
                     <div className="space-y-2">
-                      <Label htmlFor="amount">Amount *</Label>
-                      <Input
-                        id="amount"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="0.00"
-                        className="h-12 text-lg"
-                        value={formData.amount}
-                        onChange={(e) => handleInputChange('amount', e.target.value)}
-                      />
+                      <Label htmlFor="store">Store</Label>
+                      <div className="h-12 px-3 py-2 border border-input bg-muted rounded-md flex items-center">
+                        <span className="text-sm">
+                          {currentStore ? `${currentStore.store_name} (${currentStore.store_code})` : 'Loading...'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Payment Method Amounts */}
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Payment Methods *</Label>
+                      <p className="text-sm text-muted-foreground">Enter amounts for each payment method used</p>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {tenderTypes.map((tender) => (
+                        <div key={tender.value} className="space-y-2">
+                          <Label htmlFor={tender.value}>
+                            <span className="mr-2">{tender.icon}</span>
+                            {tender.label}
+                          </Label>
+                          <Input
+                            id={tender.value}
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="0.00"
+                            className="h-12 text-lg"
+                            value={formData.tenderAmounts[tender.value] || ''}
+                            onChange={(e) => handleTenderAmountChange(tender.value, e.target.value)}
+                          />
+                        </div>
+                      ))}
                     </div>
 
-                    {/* Payment Method */}
-                    <div className="space-y-2">
-                      <Label htmlFor="payment">Payment Method *</Label>
-                      <Select 
-                        value={formData.tender_type} 
-                        onValueChange={(value) => handleInputChange('tender_type', value)}
-                      >
-                        <SelectTrigger id="payment" className="h-12">
-                          <SelectValue placeholder="Select payment method" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {paymentMethods.map((method) => (
-                            <SelectItem key={method.value} value={method.value}>
-                              {method.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                    {/* Total Amount Display */}
+                    <div className="p-4 bg-muted rounded-lg">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium">Total Amount:</span>
+                        <span className="text-2xl font-bold">
+                          ₹{getTotalAmount().toLocaleString('en-IN')}
+                        </span>
+                      </div>
                     </div>
+                  </div>
 
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Date (Auto-filled) */}
                     <div className="space-y-2">
                       <Label htmlFor="date">Date</Label>

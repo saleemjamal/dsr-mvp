@@ -4,6 +4,8 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { useAuth } from "@/contexts/auth-context"
+import { UserRole, Permission, hasPermission } from "@/lib/permissions"
 import { 
   Home, 
   ShoppingCart, 
@@ -17,10 +19,21 @@ import {
   Menu,
   RotateCcw,
   Calculator,
-  CheckSquare
+  CheckSquare,
+  Building,
+  DollarSign,
+  Search
 } from "lucide-react"
 
-const navigation = [
+interface NavigationItem {
+  name: string
+  href: string
+  icon: any
+  permission?: Permission
+  roles?: UserRole[]
+}
+
+const navigation: NavigationItem[] = [
   {
     name: "Dashboard",
     href: "/",
@@ -30,61 +43,103 @@ const navigation = [
     name: "Sales",
     href: "/sales",
     icon: ShoppingCart,
+    permission: Permission.CREATE_SALE,
   },
   {
     name: "Sales Orders",
     href: "/orders",
     icon: Package,
+    permission: Permission.CREATE_SALE,
   },
   {
     name: "Expenses",
     href: "/expenses", 
     icon: Receipt,
+    permission: Permission.CREATE_EXPENSE,
   },
   {
     name: "Hand Bills",
     href: "/hand-bills",
     icon: FileText,
+    permission: Permission.CREATE_SALE,
   },
   {
     name: "Gift Vouchers",
     href: "/vouchers",
     icon: Gift,
+    permission: Permission.CREATE_VOUCHER,
   },
   {
     name: "Returns",
     href: "/returns",
     icon: RotateCcw,
+    permission: Permission.CREATE_SALE,
   },
   {
     name: "Cash Management",
     href: "/cash-management",
     icon: Calculator,
+    permission: Permission.COUNT_CASH,
   },
   {
     name: "Approvals",
     href: "/approvals",
     icon: CheckSquare,
+    roles: [UserRole.SUPER_USER, UserRole.ACCOUNTS_INCHARGE, UserRole.STORE_MANAGER],
+  },
+  {
+    name: "Reconciliation",
+    href: "/reconciliation",
+    icon: Search,
+    permission: Permission.VIEW_RECONCILIATION,
   },
   {
     name: "Customers",
     href: "/customers",
     icon: Users,
+    permission: Permission.CREATE_CUSTOMER,
   },
   {
     name: "Reports",
     href: "/reports",
     icon: BarChart3,
+    roles: [UserRole.SUPER_USER, UserRole.ACCOUNTS_INCHARGE, UserRole.STORE_MANAGER],
   },
   {
     name: "Admin",
     href: "/admin",
     icon: Settings,
+    roles: [UserRole.SUPER_USER, UserRole.STORE_MANAGER],
   },
 ]
 
+const getFilteredNavigation = (userRole: UserRole | string) => {
+  return navigation.filter(item => {
+    // If no restrictions, show to everyone
+    if (!item.permission && !item.roles) {
+      return true
+    }
+    
+    // Check role-based access
+    if (item.roles) {
+      return item.roles.includes(userRole as UserRole)
+    }
+    
+    // Check permission-based access
+    if (item.permission) {
+      return hasPermission(userRole, item.permission)
+    }
+    
+    return false
+  })
+}
+
 export function Sidebar() {
   const pathname = usePathname()
+  const { profile } = useAuth()
+
+  // Get navigation items based on user role
+  const userNavigation = profile ? getFilteredNavigation(profile.role) : []
 
   return (
     <div className="flex h-full max-h-screen flex-col gap-2">
@@ -96,7 +151,7 @@ export function Sidebar() {
       </div>
       <div className="flex-1">
         <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
-          {navigation.map((item) => {
+          {userNavigation.map((item) => {
             const isActive = pathname === item.href
             return (
               <Link

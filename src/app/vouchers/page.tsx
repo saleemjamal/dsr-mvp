@@ -1,83 +1,32 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
+import { FilterBar, type FilterState } from "@/components/ui/filter-bar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Gift, Plus, Search, AlertTriangle, Calendar, IndianRupee } from "lucide-react"
+import { Gift, Plus, Search, AlertTriangle, Calendar, IndianRupee, Loader2, Eye, Edit } from "lucide-react"
 import Link from "next/link"
+import { format } from "date-fns"
+import { useAuth } from "@/contexts/auth-context"
+import { useStore } from "@/contexts/store-context"
+import { getVouchersForDateRange, updateVoucher, type GiftVoucherSummary } from "@/lib/gift-vouchers-service"
+import { canEditTransaction } from "@/lib/reconciliation-service"
+import { toast } from "sonner"
 
-// Mock gift voucher data
-const mockVouchers = [
-  {
-    id: "1",
-    voucher_number: "GV2025001",
-    amount: 1000.00,
-    balance: 1000.00,
-    status: "active",
-    customer_name: "Rahul Sharma",
-    customer_phone: "+91 9876543001",
-    issued_date: "2025-01-20",
-    expiry_date: "2025-12-31",
-    created_at: "2025-01-20T10:30:00Z"
-  },
-  {
-    id: "2",
-    voucher_number: "GV2025002", 
-    amount: 500.00,
-    balance: 500.00,
-    status: "active",
-    customer_name: "Priya Patel",
-    customer_phone: "+91 9876543002",
-    issued_date: "2025-01-19",
-    expiry_date: "2025-06-30",
-    created_at: "2025-01-19T14:20:00Z"
-  },
-  {
-    id: "3",
-    voucher_number: "GV2025003",
-    amount: 2000.00,
-    balance: 0.00,
-    status: "redeemed",
-    customer_name: "Amit Kumar",
-    customer_phone: "+91 9876543003",
-    issued_date: "2025-01-18",
-    expiry_date: "2025-12-31",
-    created_at: "2025-01-18T09:15:00Z"
-  },
-  {
-    id: "4",
-    voucher_number: "GV2025004",
-    amount: 1500.00,
-    balance: 1500.00,
-    status: "active",
-    customer_name: "Sneha Singh",
-    customer_phone: "+91 9876543004",
-    issued_date: "2025-01-15",
-    expiry_date: "2025-02-15", // Expiring soon
-    created_at: "2025-01-15T16:45:00Z"
-  },
-  {
-    id: "5",
-    voucher_number: "GV2024999",
-    amount: 800.00,
-    balance: 800.00,
-    status: "expired",
-    customer_name: "Vikram Gupta",
-    customer_phone: "+91 9876543005",
-    issued_date: "2024-12-20",
-    expiry_date: "2025-01-20",
-    created_at: "2024-12-20T11:10:00Z"
-  }
-]
+// Gift Vouchers are not store-specific in this system, so we show all vouchers but with date filtering
+// Mock data removed - now using real data from getVouchersForDateRange
 
-const getStatusBadge = (status: string, expiryDate: string) => {
-  const isExpiringSoon = new Date(expiryDate) <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+const getStatusBadge = (status: string, expiryDate?: string) => {
+  const isExpiringSoon = expiryDate ? new Date(expiryDate) <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : false // 30 days
   
   if (status === 'active' && isExpiringSoon) {
     return <Badge variant="destructive">Expiring Soon</Badge>
@@ -101,14 +50,73 @@ const formatCurrency = (amount: number) => {
 }
 
 export default function VouchersPage() {
-  const [vouchers] = useState(mockVouchers)
+  const { profile } = useAuth()
+  const [vouchers, setVouchers] = useState<GiftVoucherSummary[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filters, setFilters] = useState<FilterState | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedVoucher, setSelectedVoucher] = useState(null)
+  
+  // Edit voucher state
+  const [editingVoucher, setEditingVoucher] = useState<GiftVoucherSummary | null>(null)
+  const [editLoading, setEditLoading] = useState(false)
+  const [editFormData, setEditFormData] = useState({
+    voucher_number: '',
+    amount: '',
+    customer_name: '',
+    customer_phone: '',
+    expiry_date: '',
+    notes: ''
+  })
+
+  // Initialize default filters on mount  
+  useEffect(() => {
+    if (!filters) {
+      // Set default to "Today" if no filters set yet
+      const today = new Date()
+      setFilters({
+        dateRange: {
+          from: today,
+          to: today,
+          preset: 'Today'
+        },
+        storeIds: [] // Gift vouchers are not store-specific
+      })
+    }
+  }, [filters])
+
+  // Load vouchers data when filters change
+  useEffect(() => {
+    if (!filters || !profile) return
+
+    const loadVouchersData = async () => {
+      try {
+        setLoading(true)
+        const fromDate = format(filters.dateRange.from, 'yyyy-MM-dd')
+        const toDate = format(filters.dateRange.to, 'yyyy-MM-dd')
+        
+        // Gift Vouchers are not store-specific, so we get all vouchers for the date range
+        const vouchersData = await getVouchersForDateRange(fromDate, toDate)
+        setVouchers(vouchersData)
+      } catch (error) {
+        console.error('Error loading vouchers:', error)
+        toast.error('Failed to load vouchers data')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadVouchersData()
+  }, [filters, profile])
+
+  const handleFiltersChange = (newFilters: FilterState) => {
+    setFilters(newFilters)
+  }
 
   const filteredVouchers = vouchers.filter(voucher => 
     voucher.voucher_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    voucher.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    voucher.customer_phone.includes(searchTerm)
+    (voucher.customer_name && voucher.customer_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (voucher.customer_phone && voucher.customer_phone.includes(searchTerm))
   )
 
   const activeVouchers = vouchers.filter(v => v.status === 'active').length
@@ -117,9 +125,71 @@ export default function VouchersPage() {
     .reduce((sum, v) => sum + v.balance, 0)
   const expiringSoon = vouchers.filter(v => {
     const isActive = v.status === 'active'
-    const isExpiringSoon = new Date(v.expiry_date) <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    const isExpiringSoon = v.expiry_date ? new Date(v.expiry_date) <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : false
     return isActive && isExpiringSoon
   }).length
+
+  const handleEditVoucher = (voucher: GiftVoucherSummary) => {
+    setEditingVoucher(voucher)
+    setEditFormData({
+      voucher_number: voucher.voucher_number,
+      amount: voucher.amount.toString(),
+      customer_name: voucher.customer_name || '',
+      customer_phone: voucher.customer_phone || '',
+      expiry_date: voucher.expiry_date || '',
+      notes: '' // Would need full voucher data
+    })
+  }
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingVoucher) return
+
+    setEditLoading(true)
+    try {
+      const amount = parseFloat(editFormData.amount)
+      if (isNaN(amount) || amount <= 0) {
+        toast.error('Please enter a valid amount')
+        return
+      }
+
+      await updateVoucher(editingVoucher.id, {
+        voucher_number: editFormData.voucher_number,
+        amount: amount,
+        customer_name: editFormData.customer_name,
+        customer_phone: editFormData.customer_phone,
+        expiry_date: editFormData.expiry_date
+      })
+
+      // Update local state
+      setVouchers(prev => prev.map(voucher => 
+        voucher.id === editingVoucher.id 
+          ? { 
+              ...voucher, 
+              voucher_number: editFormData.voucher_number,
+              amount: amount, 
+              customer_name: editFormData.customer_name,
+              customer_phone: editFormData.customer_phone,
+              expiry_date: editFormData.expiry_date
+            }
+          : voucher
+      ))
+
+      toast.success('Gift Voucher updated successfully!')
+      setEditingVoucher(null)
+      setEditFormData({ voucher_number: '', amount: '', customer_name: '', customer_phone: '', expiry_date: '', notes: '' })
+    } catch (error) {
+      console.error('Error updating voucher:', error)
+      toast.error('Failed to update voucher. Please try again.')
+    } finally {
+      setEditLoading(false)
+    }
+  }
+
+  const handleEditCancel = () => {
+    setEditingVoucher(null)
+    setEditFormData({ voucher_number: '', amount: '', customer_name: '', customer_phone: '', expiry_date: '', notes: '' })
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -134,7 +204,7 @@ export default function VouchersPage() {
         
         <main className="p-6">
           {/* Page Header */}
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="text-3xl font-bold tracking-tight">Gift Vouchers</h2>
               <p className="text-muted-foreground">
@@ -157,8 +227,16 @@ export default function VouchersPage() {
             </div>
           </div>
 
+          {/* Filter Bar - Note: Gift vouchers are not store-specific, so store filter is hidden */}
+          <FilterBar 
+            onFiltersChange={handleFiltersChange} 
+            showStoreFilter={false} 
+            showDateFilter={true}
+          />
+
           {/* Summary Stats */}
-          <div className="grid gap-4 md:grid-cols-4 mb-8">
+          {!loading && filters && (
+            <div className="grid gap-4 md:grid-cols-4 mb-6">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Active Vouchers</CardTitle>
@@ -206,20 +284,24 @@ export default function VouchersPage() {
               <CardContent>
                 <div className="text-2xl font-bold">{vouchers.length}</div>
                 <p className="text-xs text-muted-foreground">
-                  All time issued
+                  {filters.dateRange.preset || 'Custom period'}
                 </p>
               </CardContent>
             </Card>
           </div>
+          )}
 
           {/* Search and Voucher Table */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>All Gift Vouchers ({filteredVouchers.length})</CardTitle>
+                  <CardTitle>Gift Vouchers {!loading && `(${filteredVouchers.length})`}</CardTitle>
                   <CardDescription>
-                    Track and manage gift voucher lifecycle
+                    {filters?.dateRange ? 
+                      `Vouchers issued from ${format(filters.dateRange.from, 'MMM dd')} - ${format(filters.dateRange.to, 'MMM dd, yyyy')}` :
+                      'Track and manage gift voucher lifecycle'
+                    }
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
@@ -236,19 +318,26 @@ export default function VouchersPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Voucher Details</TableHead>
-                      <TableHead>Customer Info</TableHead>
-                      <TableHead>Amount & Balance</TableHead>
-                      <TableHead>Validity</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                  <span className="ml-2">Loading vouchers...</span>
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Voucher Details</TableHead>
+                          <TableHead>Customer Info</TableHead>
+                          <TableHead>Amount & Balance</TableHead>
+                          <TableHead>Validity</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
                     {filteredVouchers.map((voucher) => (
                       <TableRow key={voucher.id}>
                         <TableCell>
@@ -299,6 +388,15 @@ export default function VouchersPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
+                            {canEditTransaction(voucher.status || 'active', profile?.role || 'cashier') && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEditVoucher(voucher)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            )}
                             <Dialog>
                               <DialogTrigger asChild>
                                 <Button
@@ -306,7 +404,7 @@ export default function VouchersPage() {
                                   size="sm"
                                   onClick={() => setSelectedVoucher(voucher)}
                                 >
-                                  View Details
+                                  <Eye className="h-4 w-4" />
                                 </Button>
                               </DialogTrigger>
                               <DialogContent className="max-w-md">
@@ -378,24 +476,110 @@ export default function VouchersPage() {
                 </Table>
               </div>
               
-              {filteredVouchers.length === 0 && (
-                <div className="text-center py-8">
-                  <Gift className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">
-                    {searchTerm ? "No vouchers match your search" : "No vouchers found"}
-                  </p>
-                  {!searchTerm && (
-                    <Link href="/vouchers/new">
-                      <Button className="mt-2">
-                        <Plus className="mr-2 h-4 w-4" />
-                        Issue First Voucher
-                      </Button>
-                    </Link>
+                  {filteredVouchers.length === 0 && !loading && (
+                    <div className="text-center py-8">
+                      <Gift className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                      <p className="text-muted-foreground">
+                        {searchTerm ? "No vouchers match your search" : "No vouchers found for the selected period"}
+                      </p>
+                      {!searchTerm && (
+                        <Link href="/vouchers/new">
+                          <Button className="mt-2">
+                            <Plus className="mr-2 h-4 w-4" />
+                            Issue New Voucher
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
                   )}
-                </div>
+                </>
               )}
             </CardContent>
           </Card>
+
+          {/* Edit Gift Voucher Dialog */}
+          <Dialog open={!!editingVoucher} onOpenChange={(open) => !open && handleEditCancel()}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Edit Gift Voucher</DialogTitle>
+                <DialogDescription>
+                  Update the gift voucher details
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleEditSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit_voucher_number">Voucher Number *</Label>
+                  <Input
+                    id="edit_voucher_number"
+                    type="text"
+                    placeholder="Gift voucher number"
+                    value={editFormData.voucher_number}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, voucher_number: e.target.value }))}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_amount">Amount (₹) *</Label>
+                  <div className="relative">
+                    <IndianRupee className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="edit_amount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={editFormData.amount}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, amount: e.target.value }))}
+                      className="pl-10"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_customer_name">Customer Name</Label>
+                  <Input
+                    id="edit_customer_name"
+                    type="text"
+                    placeholder="Customer name"
+                    value={editFormData.customer_name}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, customer_name: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_customer_phone">Customer Phone</Label>
+                  <Input
+                    id="edit_customer_phone"
+                    type="tel"
+                    placeholder="Customer phone number"
+                    value={editFormData.customer_phone}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, customer_phone: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_expiry_date">Expiry Date</Label>
+                  <Input
+                    id="edit_expiry_date"
+                    type="date"
+                    value={editFormData.expiry_date}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, expiry_date: e.target.value }))}
+                  />
+                </div>
+
+                <div className="flex justify-end space-x-2">
+                  <Button type="button" variant="outline" onClick={handleEditCancel}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={editLoading}>
+                    {editLoading ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
         </main>
       </div>
     </div>

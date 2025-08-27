@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
@@ -10,24 +10,15 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { ArrowLeft, FileText, CheckCircle, IndianRupee, Calendar, User, Camera } from "lucide-react"
+import { ArrowLeft, FileText, CheckCircle, IndianRupee, Calendar, User, Camera, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
+import { getHandBillById, convertHandBillToSale, type HandBill } from "@/lib/hand-bills-service"
+import { getStoreById } from "@/lib/store-service"
+import { canEditTransaction } from "@/lib/reconciliation-service"
+import { useAuth } from "@/contexts/auth-context"
 
-// Mock data - in real app this would come from API
-const mockHandBill = {
-  id: "1",
-  bill_number: "HB001",
-  bill_date: "2025-01-22",
-  total_amount: 1250.00,
-  tender_type: "cash",
-  customer_name: "Walk-in Customer",
-  status: "pending",
-  image_url: "/images/handbill1.jpg",
-  store_name: "Main Store",
-  created_at: "2025-01-22T10:30:00Z"
-}
-
+// Mock data no longer needed - will fetch real data
 const getTenderTypeBadge = (tenderType: string) => {
   const colors = {
     cash: "bg-green-100 text-green-800",
@@ -47,10 +38,47 @@ const getTenderTypeBadge = (tenderType: string) => {
 export default function ConvertHandBillPage() {
   const router = useRouter()
   const params = useParams()
+  const { profile } = useAuth()
   const [loading, setLoading] = useState(false)
+  const [fetchingBill, setFetchingBill] = useState(true)
   const [saleId, setSaleId] = useState("")
+  const [handBill, setHandBill] = useState<HandBill | null>(null)
+  const [storeName, setStoreName] = useState<string>("")
 
-  const handBill = mockHandBill // In real app, fetch by params.id
+  // Fetch the handbill data on mount
+  useEffect(() => {
+    const fetchHandBill = async () => {
+      try {
+        setFetchingBill(true)
+        const billId = params.id as string
+        const bill = await getHandBillById(billId)
+        
+        if (!bill) {
+          toast.error("Hand bill not found")
+          router.push('/hand-bills')
+          return
+        }
+        
+        setHandBill(bill)
+        
+        // Fetch store name if available
+        if (bill.store_id) {
+          const store = await getStoreById(bill.store_id)
+          if (store) {
+            setStoreName(store.store_name)
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching hand bill:', error)
+        toast.error("Failed to load hand bill")
+        router.push('/hand-bills')
+      } finally {
+        setFetchingBill(false)
+      }
+    }
+    
+    fetchHandBill()
+  }, [params.id, router])
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -67,34 +95,71 @@ export default function ConvertHandBillPage() {
       return
     }
     
+    if (!handBill) {
+      toast.error("Hand bill data not loaded")
+      return
+    }
+    
     setLoading(true)
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      console.log('Starting conversion - Hand bill ID:', handBill.id, 'Sale ID:', saleId.toUpperCase())
       
-      const conversionData = {
-        hand_bill_id: handBill.id,
-        converted_sale_id: saleId.toUpperCase(),
-        converted_at: new Date().toISOString(),
-        converted_by: "current-user-id" // TODO: Get from auth context
-      }
-
-      console.log('Converting hand bill:', conversionData)
+      // Call the actual conversion service
+      const result = await convertHandBillToSale(handBill.id, saleId.toUpperCase())
+      console.log('Conversion result:', result)
       
-      toast.success(`Hand bill ${handBill.bill_number} successfully converted to sale ${saleId.toUpperCase()}!`)
+      toast.success(`Hand bill ${handBill.bill_number || handBill.id} converted successfully!`)
       
+      // Small delay to show success message
       setTimeout(() => {
         router.push('/hand-bills')
       }, 1000)
       
     } catch (error) {
-      toast.error("Failed to convert hand bill. Please try again.")
+      console.error('Error converting hand bill - Full error:', error)
+      
+      // Check if it's the UUID type error
+      if (error instanceof Error && error.message.includes('invalid input syntax for type uuid')) {
+        toast.error('Database column type issue. Please run the migration to fix converted_sale_id column type.')
+      } else {
+        toast.error(`Failed to convert: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      }
     } finally {
+      console.log('Setting loading to false')
       setLoading(false)
     }
   }
 
-  if (handBill.status !== 'pending') {
+  // Show loading state while fetching
+  if (fetchingBill) {
+    return (
+      <div className="flex min-h-screen">
+        <aside className="hidden lg:block w-64 border-r">
+          <Sidebar />
+        </aside>
+        
+        <div className="flex-1">
+          <Header />
+          
+          <main className="p-6">
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span className="ml-2">Loading hand bill...</span>
+            </div>
+          </main>
+        </div>
+      </div>
+    )
+  }
+
+  // Handle case where handbill wasn't found
+  if (!handBill) {
+    return null // Will redirect in useEffect
+  }
+
+  // Check if handbill can be converted (only if it's editable)
+  if (!canEditTransaction(handBill.status || 'pending', profile?.role || 'cashier')) {
     return (
       <div className="flex min-h-screen">
         <aside className="hidden lg:block w-64 border-r">

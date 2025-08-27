@@ -46,7 +46,7 @@ const quickActions = [
     title: "Expense Categories",
     description: "Configure expense categories",
     icon: Tag,
-    href: "/admin/categories",
+    href: "/admin/expense-categories",
     color: "text-orange-600",
     bgColor: "bg-orange-100"
   },

@@ -1,81 +1,27 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
+import { FilterBar, type FilterState } from "@/components/ui/filter-bar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { FileText, Plus, Search, Calendar, IndianRupee, Camera, CheckCircle, AlertTriangle, Clock } from "lucide-react"
+import { FileText, Plus, Search, Calendar, IndianRupee, Camera, CheckCircle, AlertTriangle, Clock, Loader2, ExternalLink, Image, Eye, Edit } from "lucide-react"
 import Link from "next/link"
+import { format } from "date-fns"
+import { useAuth } from "@/contexts/auth-context"
+import { useStore } from "@/contexts/store-context"
+import { getHandBillsForDateRange, updateHandBill, type HandBillSummary } from "@/lib/hand-bills-service"
+import { canEditTransaction } from "@/lib/reconciliation-service"
+import { toast } from "sonner"
 
-const mockHandBills = [
-  {
-    id: "1",
-    bill_number: "HB001",
-    bill_date: "2025-01-22",
-    total_amount: 1250.00,
-    tender_type: "cash",
-    customer_name: "Walk-in Customer",
-    status: "pending",
-    image_url: "/images/handbill1.jpg",
-    store_name: "Main Store",
-    created_at: "2025-01-22T10:30:00Z"
-  },
-  {
-    id: "2", 
-    bill_number: "HB002",
-    bill_date: "2025-01-22",
-    total_amount: 850.00,
-    tender_type: "upi",
-    customer_name: "Rajesh Kumar",
-    status: "converted",
-    converted_sale_id: "S2025001",
-    image_url: "/images/handbill2.jpg",
-    store_name: "Main Store",
-    created_at: "2025-01-22T11:15:00Z"
-  },
-  {
-    id: "3",
-    bill_number: "HB003", 
-    bill_date: "2025-01-21",
-    total_amount: 2100.00,
-    tender_type: "credit_card",
-    customer_name: "Priya Sharma",
-    status: "pending",
-    image_url: "/images/handbill3.jpg",
-    store_name: "Main Store",
-    created_at: "2025-01-21T16:45:00Z"
-  },
-  {
-    id: "4",
-    bill_number: "HB004",
-    bill_date: "2025-01-21", 
-    total_amount: 675.00,
-    tender_type: "cash",
-    customer_name: "Walk-in Customer",
-    status: "cancelled",
-    image_url: "/images/handbill4.jpg",
-    store_name: "Main Store",
-    created_at: "2025-01-21T14:20:00Z"
-  },
-  {
-    id: "5",
-    bill_number: "HB005",
-    bill_date: "2025-01-20",
-    total_amount: 1450.00,
-    tender_type: "upi",
-    customer_name: "Amit Patel",
-    status: "converted",
-    converted_sale_id: "S2025003",
-    image_url: "/images/handbill5.jpg",
-    store_name: "Main Store",
-    created_at: "2025-01-20T13:10:00Z"
-  }
-]
 
 const getStatusBadge = (status: string) => {
   const variants = {
@@ -124,13 +70,89 @@ const getTenderTypeBadge = (tenderType: string) => {
 }
 
 export default function HandBillsPage() {
-  const [handBills] = useState(mockHandBills)
+  const { profile } = useAuth()
+  const { accessibleStores } = useStore()
+  const [handBills, setHandBills] = useState<HandBillSummary[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filters, setFilters] = useState<FilterState | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedBill, setSelectedBill] = useState(null)
+  
+  // Edit hand bill state
+  const [editingBill, setEditingBill] = useState<HandBillSummary | null>(null)
+  const [editLoading, setEditLoading] = useState(false)
+  const [editFormData, setEditFormData] = useState({
+    bill_number: '',
+    total_amount: '',
+    tender_type: '',
+    customer_name: '',
+    items_description: '',
+    notes: ''
+  })
+
+  // Initialize default filters on mount  
+  useEffect(() => {
+    if (!filters) {
+      // Set default to "Today" if no filters set yet
+      const today = new Date()
+      setFilters({
+        dateRange: {
+          from: today,
+          to: today,
+          preset: 'Today'
+        },
+        storeIds: [], // Will be set by FilterBar based on user permissions
+        storeId: null // All stores by default
+      })
+    }
+  }, [filters])
+
+  // Load hand bills data when filters change
+  useEffect(() => {
+    if (!filters || !profile || !accessibleStores || accessibleStores.length === 0) {
+      return
+    }
+
+    const loadHandBillsData = async () => {
+      try {
+        setLoading(true)
+        const fromDate = format(filters.dateRange.from, 'yyyy-MM-dd')
+        const toDate = format(filters.dateRange.to, 'yyyy-MM-dd')
+        
+        // Get user's accessible stores
+        const userStoreIds = accessibleStores.map(store => store.id)
+        
+        // Determine store filter based on selection
+        let storeFilter: string[] | null = null
+        if (filters.storeId === null) {
+          // "All Stores" selected - use user's accessible stores
+          storeFilter = userStoreIds
+        } else {
+          // Specific store selected
+          storeFilter = [filters.storeId]
+        }
+        
+        const handBillsData = await getHandBillsForDateRange(fromDate, toDate, storeFilter)
+        setHandBills(handBillsData || [])
+      } catch (error) {
+        console.error('Error loading hand bills:', error)
+        toast.error('Failed to load hand bills data')
+        setHandBills([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadHandBillsData()
+  }, [filters, profile, accessibleStores])
+
+  const handleFiltersChange = (newFilters: FilterState) => {
+    setFilters(newFilters)
+  }
 
   const filteredBills = handBills.filter(bill => 
-    bill.bill_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    bill.customer_name.toLowerCase().includes(searchTerm.toLowerCase())
+    bill.bill_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    bill.customer_name?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   const formatCurrency = (amount: number) => {
@@ -138,6 +160,68 @@ export default function HandBillsPage() {
       style: 'currency',
       currency: 'INR'
     }).format(amount)
+  }
+
+  const handleEditBill = (bill: HandBillSummary) => {
+    setEditingBill(bill)
+    setEditFormData({
+      bill_number: bill.bill_number || '',
+      total_amount: bill.total_amount.toString(),
+      tender_type: bill.tender_type,
+      customer_name: bill.customer_name || '',
+      items_description: '', // Would need full bill data
+      notes: '' // Would need full bill data
+    })
+  }
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingBill) return
+
+    setEditLoading(true)
+    try {
+      const amount = parseFloat(editFormData.total_amount)
+      if (isNaN(amount) || amount <= 0) {
+        toast.error('Please enter a valid amount')
+        return
+      }
+
+      await updateHandBill(editingBill.id, {
+        bill_number: editFormData.bill_number,
+        total_amount: amount,
+        tender_type: editFormData.tender_type,
+        customer_name: editFormData.customer_name,
+        items_description: editFormData.items_description,
+        notes: editFormData.notes
+      })
+
+      // Update local state
+      setHandBills(prev => prev.map(bill => 
+        bill.id === editingBill.id 
+          ? { 
+              ...bill, 
+              bill_number: editFormData.bill_number,
+              total_amount: amount, 
+              tender_type: editFormData.tender_type,
+              customer_name: editFormData.customer_name
+            }
+          : bill
+      ))
+
+      toast.success('Hand Bill updated successfully!')
+      setEditingBill(null)
+      setEditFormData({ bill_number: '', total_amount: '', tender_type: '', customer_name: '', items_description: '', notes: '' })
+    } catch (error) {
+      console.error('Error updating hand bill:', error)
+      toast.error('Failed to update hand bill. Please try again.')
+    } finally {
+      setEditLoading(false)
+    }
+  }
+
+  const handleEditCancel = () => {
+    setEditingBill(null)
+    setEditFormData({ bill_number: '', total_amount: '', tender_type: '', customer_name: '', items_description: '', notes: '' })
   }
 
   const totalBills = handBills.length
@@ -173,7 +257,15 @@ export default function HandBillsPage() {
             </div>
           </div>
 
+          {/* Filter Bar */}
+          <FilterBar 
+            onFiltersChange={handleFiltersChange} 
+            showStoreFilter={true}
+            showDateFilter={true}
+          />
+
           {/* Summary Stats */}
+          {!loading && filters && (
           <div className="grid gap-4 md:grid-cols-5 mb-8">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -240,15 +332,19 @@ export default function HandBillsPage() {
               </CardContent>
             </Card>
           </div>
+          )}
 
           {/* Hand Bills Table */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>All Hand Bills ({filteredBills.length})</CardTitle>
+                  <CardTitle>Hand Bills {!loading && `(${filteredBills.length})`}</CardTitle>
                   <CardDescription>
-                    Manual bills from POS failures and conversions
+                    {filters?.dateRange ? 
+                      `Hand bills from ${format(filters.dateRange.from, 'MMM dd')} - ${format(filters.dateRange.to, 'MMM dd, yyyy')}` :
+                      'Manual bills from POS failures and conversions'
+                    }
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
@@ -265,10 +361,18 @@ export default function HandBillsPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                  <span className="ml-2">Loading hand bills...</span>
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Image</TableHead>
                       <TableHead>Bill Details</TableHead>
                       <TableHead>Customer</TableHead>
                       <TableHead>Amount & Payment</TableHead>
@@ -281,13 +385,50 @@ export default function HandBillsPage() {
                     {filteredBills.map((bill) => (
                       <TableRow key={bill.id}>
                         <TableCell>
+                          {bill.image_url ? (
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <button className="relative group cursor-pointer">
+                                  <img 
+                                    src={bill.image_url} 
+                                    alt={`Bill ${bill.bill_number}`}
+                                    className="w-16 h-16 object-cover rounded border hover:border-primary transition-colors"
+                                  />
+                                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded flex items-center justify-center">
+                                    <ExternalLink className="h-4 w-4 text-white" />
+                                  </div>
+                                </button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-4xl">
+                                <DialogHeader>
+                                  <DialogTitle>Hand Bill Image - {bill.bill_number}</DialogTitle>
+                                  <DialogDescription>
+                                    Original hand bill image from {new Date(bill.bill_date).toLocaleDateString('en-IN')}
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <div className="mt-4">
+                                  <img 
+                                    src={bill.image_url} 
+                                    alt={`Bill ${bill.bill_number}`}
+                                    className="w-full h-auto rounded border"
+                                  />
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+                          ) : (
+                            <div className="w-16 h-16 bg-muted rounded flex items-center justify-center">
+                              <Image className="h-6 w-6 text-muted-foreground" />
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
                           <div className="flex items-center gap-3">
                             <div className="p-2 bg-primary/10 rounded-lg">
                               <FileText className="h-4 w-4 text-primary" />
                             </div>
                             <div>
                               <p className="font-medium">{bill.bill_number}</p>
-                              <p className="text-sm text-muted-foreground">{bill.store_name}</p>
+                              <p className="text-sm text-muted-foreground">{bill.stores?.store_name}</p>
                             </div>
                           </div>
                         </TableCell>
@@ -317,14 +458,23 @@ export default function HandBillsPage() {
                         </TableCell>
                         <TableCell>
                           {getStatusBadge(bill.status)}
-                          {bill.status === 'converted' && bill.converted_sale_id && (
+                          {bill.status === 'converted' && (
                             <p className="text-xs text-muted-foreground mt-1">
-                              Sale: {bill.converted_sale_id}
+                              Sale: Converted
                             </p>
                           )}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
+                            {canEditTransaction(bill.status || 'pending', profile?.role || 'cashier') && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEditBill(bill)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            )}
                             <Dialog>
                               <DialogTrigger asChild>
                                 <Button
@@ -332,7 +482,7 @@ export default function HandBillsPage() {
                                   size="sm"
                                   onClick={() => setSelectedBill(bill)}
                                 >
-                                  View Details
+                                  <Eye className="h-4 w-4" />
                                 </Button>
                               </DialogTrigger>
                               <DialogContent className="max-w-md">
@@ -380,23 +530,37 @@ export default function HandBillsPage() {
                                     </div>
                                     <div>
                                       <p className="text-sm font-medium">Store</p>
-                                      <p className="text-sm text-muted-foreground">{bill.store_name}</p>
+                                      <p className="text-sm text-muted-foreground">{bill.stores?.store_name}</p>
                                     </div>
                                   </div>
                                   
-                                  {bill.converted_sale_id && (
+                                  {bill.status === 'converted' && (
                                     <div>
                                       <p className="text-sm font-medium">Converted Sale ID</p>
-                                      <p className="text-sm text-muted-foreground">{bill.converted_sale_id}</p>
+                                      <p className="text-sm text-muted-foreground">Sale converted</p>
                                     </div>
                                   )}
                                   
                                   <div>
                                     <p className="text-sm font-medium">Bill Image</p>
-                                    <div className="mt-2 p-3 bg-muted rounded-lg flex items-center gap-2">
-                                      <Camera className="h-4 w-4 text-muted-foreground" />
-                                      <span className="text-sm text-muted-foreground">Image available</span>
-                                    </div>
+                                    {bill.image_url ? (
+                                      <div className="mt-2">
+                                        <img 
+                                          src={bill.image_url} 
+                                          alt={`Bill ${bill.bill_number}`}
+                                          className="w-full h-48 object-cover rounded border cursor-pointer hover:opacity-90 transition-opacity"
+                                          onClick={() => window.open(bill.image_url, '_blank')}
+                                        />
+                                        <p className="text-xs text-muted-foreground mt-1 text-center">
+                                          Click to view full size
+                                        </p>
+                                      </div>
+                                    ) : (
+                                      <div className="mt-2 p-3 bg-muted rounded-lg flex items-center gap-2">
+                                        <Camera className="h-4 w-4 text-muted-foreground" />
+                                        <span className="text-sm text-muted-foreground">No image available</span>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               </DialogContent>
@@ -415,26 +579,129 @@ export default function HandBillsPage() {
                     ))}
                   </TableBody>
                 </Table>
-              </div>
-              
-              {filteredBills.length === 0 && (
-                <div className="text-center py-8">
-                  <FileText className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">
-                    {searchTerm ? "No hand bills match your search" : "No hand bills found"}
-                  </p>
-                  {!searchTerm && (
-                    <Link href="/hand-bills/new">
-                      <Button className="mt-2">
-                        <Plus className="mr-2 h-4 w-4" />
-                        Add First Hand Bill
-                      </Button>
-                    </Link>
+                  </div>
+                  
+                  {filteredBills.length === 0 && !loading && (
+                    <div className="text-center py-8">
+                      <FileText className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                      <p className="text-muted-foreground">
+                        {searchTerm ? "No hand bills match your search" : "No hand bills found for the selected period"}
+                      </p>
+                      {!searchTerm && (
+                        <Link href="/hand-bills/new">
+                          <Button className="mt-2">
+                            <Plus className="mr-2 h-4 w-4" />
+                            Add First Hand Bill
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
                   )}
-                </div>
+                </>
               )}
             </CardContent>
           </Card>
+
+          {/* Edit Hand Bill Dialog */}
+          <Dialog open={!!editingBill} onOpenChange={(open) => !open && handleEditCancel()}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Edit Hand Bill</DialogTitle>
+                <DialogDescription>
+                  Update the hand bill transaction details
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleEditSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit_bill_number">Bill Number *</Label>
+                  <Input
+                    id="edit_bill_number"
+                    type="text"
+                    placeholder="Hand bill number"
+                    value={editFormData.bill_number}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, bill_number: e.target.value }))}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_total_amount">Total Amount (₹) *</Label>
+                  <div className="relative">
+                    <IndianRupee className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="edit_total_amount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={editFormData.total_amount}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, total_amount: e.target.value }))}
+                      className="pl-10"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_tender_type">Payment Method *</Label>
+                  <Select value={editFormData.tender_type} onValueChange={(value) => setEditFormData(prev => ({ ...prev, tender_type: value }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select payment method" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="upi">UPI</SelectItem>
+                      <SelectItem value="credit_card">Credit Card</SelectItem>
+                      <SelectItem value="gift_voucher">Gift Voucher</SelectItem>
+                      <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_customer_name">Customer Name</Label>
+                  <Input
+                    id="edit_customer_name"
+                    type="text"
+                    placeholder="Customer name"
+                    value={editFormData.customer_name}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, customer_name: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_items_description">Items Description</Label>
+                  <Textarea
+                    id="edit_items_description"
+                    placeholder="Description of items..."
+                    value={editFormData.items_description}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, items_description: e.target.value }))}
+                    className="min-h-[60px]"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_notes">Notes</Label>
+                  <Textarea
+                    id="edit_notes"
+                    placeholder="Any additional notes..."
+                    value={editFormData.notes}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, notes: e.target.value }))}
+                    className="min-h-[60px]"
+                  />
+                </div>
+
+                <div className="flex justify-end space-x-2">
+                  <Button type="button" variant="outline" onClick={handleEditCancel}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={editLoading}>
+                    {editLoading ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
         </main>
       </div>
     </div>

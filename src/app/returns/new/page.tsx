@@ -9,18 +9,24 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CustomerLookup } from "@/components/ui/customer-lookup"
 import { TenderTypeSelect } from "@/components/ui/tender-type-select"
 import { ReturnReasonSelect } from "@/components/ui/return-reason-select"
 import { ArrowLeft, RotateCcw, Calendar, IndianRupee, Receipt, FileText } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
+import { createReturn } from "@/lib/returns-service"
+import { createCustomer, searchCustomers } from "@/lib/customer-service"
+import { useStore } from "@/contexts/store-context"
 
 export default function NewRRNPage() {
   const router = useRouter()
+  const { currentStore, accessibleStores, canAccessMultipleStores } = useStore()
   const [loading, setLoading] = useState(false)
-  const [customer, setCustomer] = useState(null)
+  const [customer, setCustomer] = useState<any>(null)
   const [formData, setFormData] = useState({
+    store_id: currentStore?.id || accessibleStores[0]?.id || '',
     rrn_number: '',
     sales_bill_number: '',
     rrn_amount: '',
@@ -36,6 +42,10 @@ export default function NewRRNPage() {
 
   const validateForm = () => {
     const errors = []
+    
+    if (!formData.store_id) {
+      errors.push("Store selection is required")
+    }
     
     if (!formData.rrn_number.trim()) {
       errors.push("RRN number is required")
@@ -81,40 +91,39 @@ export default function NewRRNPage() {
     setLoading(true)
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      let customerId = customer.id
       
-      const expiryDate = new Date(formData.rrn_date)
-      expiryDate.setFullYear(expiryDate.getFullYear() + 1) // Valid for 1 year
-      
-      const rrnData = {
-        id: String(Date.now()),
-        rrn_number: formData.rrn_number.toUpperCase(),
-        sales_bill_number: formData.sales_bill_number.toUpperCase(),
-        rrn_amount: parseFloat(formData.rrn_amount),
-        balance: parseFloat(formData.rrn_amount), // Initially full amount available
-        rrn_date: formData.rrn_date,
-        expiry_date: expiryDate.toISOString().split('T')[0],
-        tender_type: formData.tender_type,
-        return_reason: formData.return_reason,
-        customer_id: customer.id,
-        customer_name: customer.name,
-        customer_phone: customer.phone,
-        customer_email: customer.email || null,
-        status: 'active',
-        remarks: formData.remarks || null,
-        created_at: new Date().toISOString()
+      if (!customerId && customer.name && customer.phone) {
+        const newCustomer = await createCustomer({
+          customer_name: customer.name,
+          phone: customer.phone,
+          email: customer.email || undefined
+        })
+        customerId = newCustomer.id
       }
 
-      console.log('Creating RRN:', rrnData)
+      const returnData = {
+        store_id: formData.store_id,
+        return_date: formData.rrn_date,
+        original_bill_reference: formData.sales_bill_number.toUpperCase(),
+        return_amount: parseFloat(formData.rrn_amount),
+        refund_method: formData.tender_type,
+        customer_name: customer.name,
+        reason: formData.return_reason,
+        notes: formData.remarks || undefined
+      }
+
+      await createReturn(returnData)
       
-      toast.success(`RRN ${formData.rrn_number.toUpperCase()} issued successfully!`)
+      toast.success(`Return ${formData.sales_bill_number.toUpperCase()} processed successfully!`)
       
       setTimeout(() => {
         router.push('/returns')
       }, 1000)
       
     } catch (error) {
-      toast.error("Failed to create RRN. Please try again.")
+      console.error('Error creating return:', error)
+      toast.error("Failed to create return. Please try again.")
     } finally {
       setLoading(false)
     }
@@ -141,8 +150,9 @@ export default function NewRRNPage() {
 
   const generateRRNNumber = () => {
     const currentYear = new Date().getFullYear()
+    const currentMonth = (new Date().getMonth() + 1).toString().padStart(2, '0')
     const randomNum = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
-    const suggested = `RRN${currentYear}${randomNum}`
+    const suggested = `RET${currentYear}${currentMonth}${randomNum}`
     handleInputChange('rrn_number', suggested)
   }
 
@@ -188,6 +198,38 @@ export default function NewRRNPage() {
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-6">
                   
+                  {/* Store Selection - Only show dropdown for multi-store users */}
+                  {canAccessMultipleStores ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="store">Store *</Label>
+                      <Select 
+                        value={formData.store_id} 
+                        onValueChange={(value) => handleInputChange('store_id', value)}
+                      >
+                        <SelectTrigger id="store" className="h-12">
+                          <SelectValue placeholder="Select store" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {accessibleStores.map((store) => (
+                            <SelectItem key={store.id} value={store.id}>
+                              {store.store_name} ({store.store_code})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : (
+                    /* Single store users - Show current store as read-only */
+                    <div className="space-y-2">
+                      <Label htmlFor="store">Store</Label>
+                      <div className="h-12 px-3 py-2 border border-input bg-muted rounded-md flex items-center">
+                        <span className="text-sm">
+                          {currentStore ? `${currentStore.store_name} (${currentStore.store_code})` : 'Loading...'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  
                   {/* RRN Basic Information */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
@@ -195,7 +237,7 @@ export default function NewRRNPage() {
                       <div className="flex gap-2">
                         <Input
                           id="rrn_number"
-                          placeholder="e.g., RRN2025001"
+                          placeholder="e.g., RET202501001"
                           value={formData.rrn_number}
                           onChange={(e) => handleInputChange('rrn_number', e.target.value.toUpperCase())}
                           required

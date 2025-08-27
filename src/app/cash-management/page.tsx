@@ -1,33 +1,41 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
+import { FilterBar, type FilterState } from "@/components/ui/filter-bar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Calculator, IndianRupee, TrendingUp, TrendingDown, Clock, CheckCircle, AlertTriangle, Plus, ArrowRight } from "lucide-react"
+import { Calculator, IndianRupee, TrendingUp, TrendingDown, Clock, CheckCircle, AlertTriangle, Plus, ArrowRight, Loader2 } from "lucide-react"
 import Link from "next/link"
+import { format } from "date-fns"
+import { useAuth } from "@/contexts/auth-context"
+import { useStore } from "@/contexts/store-context"
+import { calculateExpectedCashAmount, getCashSummary, getLatestCashCount } from "@/lib/cash-service"
+import { toast } from "sonner"
 
-// Mock data for cash management dashboard
-const mockCashData = {
+interface CashData {
   salesCash: {
-    expected: 15000,
-    actual: 15050,
-    variance: 50,
-    lastCounted: "2025-01-22T08:30:00Z"
-  },
+    expected: number
+    actual: number
+    variance: number
+    lastCounted?: string
+  }
   pettyCash: {
-    balance: 3200,
-    lastCounted: "2025-01-22T08:45:00Z",
-    lowThreshold: 2000
-  },
+    balance: number
+    expected: number
+    actual: number
+    variance: number
+    lastCounted?: string
+    lowThreshold: number
+  }
   todayTransactions: {
-    cashSales: 12500,
-    cashAdvances: 2500,
-    cashTransfers: 1000,
-    deposits: 0
+    cashSales: number
+    cashAdvances: number
+    cashTransfers: number
+    deposits: number
   }
 }
 
@@ -63,7 +71,78 @@ const mockCashHistory = [
 ]
 
 export default function CashManagementPage() {
-  const [selectedDate] = useState(new Date().toISOString().split('T')[0])
+  const { profile } = useAuth()
+  const { accessibleStores, selectedStore } = useStore()
+  const [loading, setLoading] = useState(true)
+  const [filters, setFilters] = useState<FilterState | null>(null)
+  const [cashData, setCashData] = useState<CashData | null>(null)
+  const [cashHistory, setCashHistory] = useState(mockCashHistory)
+
+  // Load cash management data when filters change
+  useEffect(() => {
+    if (!filters || !profile || !accessibleStores || accessibleStores.length === 0) return
+
+    const loadCashData = async () => {
+      try {
+        setLoading(true)
+        const date = format(filters.dateRange.to, 'yyyy-MM-dd') // Use 'to' date for counting day
+        
+        // Use selected store or first accessible store
+        const storeId = selectedStore?.id || accessibleStores[0]?.id
+        if (!storeId) {
+          throw new Error('No store selected')
+        }
+
+        // Calculate expected amounts
+        const salesExpected = await calculateExpectedCashAmount(storeId, 'sales_cash', date)
+        const pettyExpected = await calculateExpectedCashAmount(storeId, 'petty_cash', date)
+
+        // Get latest cash counts
+        const salesCount = await getLatestCashCount(storeId, 'sales_drawer')
+        const pettyCount = await getLatestCashCount(storeId, 'petty_cash')
+
+        const salesActual = salesCount?.total_counted || 0
+        const pettyActual = pettyCount?.total_counted || 0
+
+        const newCashData: CashData = {
+          salesCash: {
+            expected: salesExpected,
+            actual: salesActual,
+            variance: salesActual - salesExpected,
+            lastCounted: salesCount?.counted_at
+          },
+          pettyCash: {
+            balance: pettyActual,
+            expected: pettyExpected,
+            actual: pettyActual,
+            variance: pettyActual - pettyExpected,
+            lastCounted: pettyCount?.counted_at,
+            lowThreshold: 2000
+          },
+          todayTransactions: {
+            cashSales: 0, // TODO: Calculate from today's transactions
+            cashAdvances: 0,
+            cashTransfers: 0,
+            deposits: 0
+          }
+        }
+
+        setCashData(newCashData)
+        setCashHistory(mockCashHistory) // Keep mock history for now
+      } catch (error) {
+        console.error('Error loading cash management data:', error)
+        toast.error('Failed to load cash management data')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadCashData()
+  }, [filters, profile, accessibleStores, selectedStore])
+
+  const handleFiltersChange = (newFilters: FilterState) => {
+    setFilters(newFilters)
+  }
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -82,7 +161,15 @@ export default function CashManagementPage() {
     }
   }
 
-  const isPettyCashLow = mockCashData.pettyCash.balance < mockCashData.pettyCash.lowThreshold
+  const getCriticalVarianceAlert = (totalVariance: number) => {
+    if (Math.abs(totalVariance) >= 500) {
+      return <Badge variant="destructive" className="text-red-700 animate-pulse"><AlertTriangle className="h-3 w-3 mr-1" />CRITICAL: ₹{Math.abs(totalVariance)}</Badge>
+    }
+    return null
+  }
+
+  const isPettyCashLow = cashData ? cashData.pettyCash.balance < cashData.pettyCash.lowThreshold : false
+  const totalVariance = cashData ? cashData.salesCash.variance + cashData.pettyCash.variance : 0
 
   return (
     <div className="flex min-h-screen">
@@ -118,8 +205,32 @@ export default function CashManagementPage() {
             </div>
           </div>
 
+          {/* Filter Bar */}
+          <FilterBar 
+            onFiltersChange={handleFiltersChange} 
+            showStoreFilter={true}
+            showDateFilter={true}
+          />
+
           {/* Cash Status Cards */}
+          {!loading && filters && cashData && (
           <div className="grid gap-4 md:grid-cols-4 mb-8">
+            
+            {/* Critical Variance Alert */}
+            {getCriticalVarianceAlert(totalVariance) && (
+              <Card className="border-red-200 bg-red-50">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-red-800">Variance Alert</CardTitle>
+                  <AlertTriangle className="h-4 w-4 text-red-600" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-red-700">₹{Math.abs(totalVariance)}</div>
+                  <p className="text-xs text-red-600 mt-2">
+                    Critical variance requires immediate attention
+                  </p>
+                </CardContent>
+              </Card>
+            )}
             
             {/* Sales Cash Status */}
             <Card>
@@ -128,12 +239,12 @@ export default function CashManagementPage() {
                 <Calculator className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(mockCashData.salesCash.actual)}</div>
+                <div className="text-2xl font-bold">{formatCurrency(cashData.salesCash.actual)}</div>
                 <div className="flex items-center justify-between mt-2">
                   <p className="text-xs text-muted-foreground">
-                    Expected: {formatCurrency(mockCashData.salesCash.expected)}
+                    Expected: {formatCurrency(cashData.salesCash.expected)}
                   </p>
-                  {getVarianceBadge(mockCashData.salesCash.variance)}
+                  {getVarianceBadge(cashData.salesCash.variance)}
                 </div>
               </CardContent>
             </Card>
@@ -146,13 +257,19 @@ export default function CashManagementPage() {
               </CardHeader>
               <CardContent>
                 <div className={`text-2xl font-bold ${isPettyCashLow ? 'text-orange-600' : ''}`}>
-                  {formatCurrency(mockCashData.pettyCash.balance)}
+                  {formatCurrency(cashData.pettyCash.balance)}
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-xs text-muted-foreground">
+                    Expected: {formatCurrency(cashData.pettyCash.expected)}
+                  </p>
+                  {getVarianceBadge(cashData.pettyCash.variance)}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
                   {isPettyCashLow ? (
                     <span className="text-orange-600 flex items-center">
                       <AlertTriangle className="h-3 w-3 mr-1" />
-                      Below ₹{mockCashData.pettyCash.lowThreshold.toLocaleString()}
+                      Below ₹{cashData.pettyCash.lowThreshold.toLocaleString()}
                     </span>
                   ) : (
                     <span className="text-green-600 flex items-center">
@@ -172,11 +289,11 @@ export default function CashManagementPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-green-600">
-                  {formatCurrency(mockCashData.todayTransactions.cashSales + mockCashData.todayTransactions.cashAdvances)}
+                  {formatCurrency(cashData.todayTransactions.cashSales + cashData.todayTransactions.cashAdvances)}
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  Sales: {formatCurrency(mockCashData.todayTransactions.cashSales)} + 
-                  Advances: {formatCurrency(mockCashData.todayTransactions.cashAdvances)}
+                  Sales: {formatCurrency(cashData.todayTransactions.cashSales)} + 
+                  Advances: {formatCurrency(cashData.todayTransactions.cashAdvances)}
                 </p>
               </CardContent>
             </Card>
@@ -184,20 +301,22 @@ export default function CashManagementPage() {
             {/* Cash Transfers Today */}
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Transfers Out</CardTitle>
-                <TrendingDown className="h-4 w-4 text-orange-500" />
+                <CardTitle className="text-sm font-medium">Total Variance</CardTitle>
+                <TrendingDown className={`h-4 w-4 ${Math.abs(totalVariance) >= 500 ? 'text-red-500' : Math.abs(totalVariance) > 150 ? 'text-orange-500' : 'text-green-500'}`} />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-orange-600">
-                  {formatCurrency(mockCashData.todayTransactions.cashTransfers + mockCashData.todayTransactions.deposits)}
+                <div className={`text-2xl font-bold ${Math.abs(totalVariance) >= 500 ? 'text-red-600' : Math.abs(totalVariance) > 150 ? 'text-orange-600' : 'text-green-600'}`}>
+                  {formatCurrency(totalVariance)}
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  To Petty: {formatCurrency(mockCashData.todayTransactions.cashTransfers)} + 
-                  Deposits: {formatCurrency(mockCashData.todayTransactions.deposits)}
+                  {Math.abs(totalVariance) >= 500 ? 'Critical variance - requires attention' : 
+                   Math.abs(totalVariance) > 150 ? 'Warning level variance' : 
+                   'Normal variance range'}
                 </p>
               </CardContent>
             </Card>
           </div>
+          )}
 
           {/* Low Cash Alert */}
           {isPettyCashLow && (
@@ -209,7 +328,7 @@ export default function CashManagementPage() {
                     <div>
                       <h4 className="font-medium text-orange-900 dark:text-orange-100">Low Petty Cash Alert</h4>
                       <p className="text-sm text-orange-700 dark:text-orange-300">
-                        Petty cash balance ({formatCurrency(mockCashData.pettyCash.balance)}) is below the threshold of {formatCurrency(mockCashData.pettyCash.lowThreshold)}. 
+                        Petty cash balance ({formatCurrency(cashData.pettyCash.balance)}) is below the threshold of {formatCurrency(cashData.pettyCash.lowThreshold)}. 
                         Consider requesting a transfer from sales cash.
                       </p>
                     </div>
@@ -237,13 +356,22 @@ export default function CashManagementPage() {
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="text-xs">
                     <Clock className="h-3 w-3 mr-1" />
-                    Today: {selectedDate}
+                    {filters?.dateRange ? 
+                      `${format(filters.dateRange.from, 'MMM dd')} - ${format(filters.dateRange.to, 'MMM dd, yyyy')}` :
+                      'Activity period'
+                    }
                   </Badge>
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                  <span className="ml-2">Loading cash management data...</span>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -297,6 +425,7 @@ export default function CashManagementPage() {
                   </TableBody>
                 </Table>
               </div>
+              )}
             </CardContent>
           </Card>
         </main>

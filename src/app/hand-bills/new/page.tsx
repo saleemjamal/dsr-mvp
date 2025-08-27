@@ -9,24 +9,32 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { CustomerLookup } from "@/components/ui/customer-lookup"
 import { TenderTypeSelect } from "@/components/ui/tender-type-select"
 import { SmartCameraCapture } from "@/components/ui/smart-camera-capture"
 import { CapturedPhoto } from "@/components/ui/mobile-camera-input"
 import { ArrowLeft, FileText, Calendar, IndianRupee, User, Camera } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
+import { createHandBill } from "@/lib/hand-bills-service"
+import { createCustomer } from "@/lib/customer-service"
+import { useStore } from "@/contexts/store-context"
+import { uploadImage, generateImagePath } from "@/lib/storage-service"
 
 export default function NewHandBillPage() {
   const router = useRouter()
+  const { currentStore, accessibleStores, canAccessMultipleStores } = useStore()
   const [loading, setLoading] = useState(false)
   const [showCamera, setShowCamera] = useState(false)
   const [capturedPhoto, setCapturedPhoto] = useState<CapturedPhoto | null>(null)
+  const [customer, setCustomer] = useState<any>(null)
   const [formData, setFormData] = useState({
+    store_id: currentStore?.id || accessibleStores[0]?.id || '',
     bill_number: '',
     bill_date: new Date().toISOString().split('T')[0],
     total_amount: '',
     tender_type: '',
-    customer_name: '',
     notes: ''
   })
 
@@ -42,6 +50,10 @@ export default function NewHandBillPage() {
 
   const validateForm = () => {
     const errors = []
+    
+    if (!formData.store_id) {
+      errors.push("Store selection is required")
+    }
     
     if (!formData.bill_number.trim()) {
       errors.push("Bill number is required")
@@ -60,12 +72,12 @@ export default function NewHandBillPage() {
       errors.push("Payment method is required")
     }
     
-    if (!formData.customer_name.trim()) {
-      errors.push("Customer name is required")
-    }
-    
     if (!capturedPhoto) {
       errors.push("Hand bill image is required")
+    }
+    
+    if (capturedPhoto && !customer) {
+      errors.push("Customer information is required")
     }
     
     return errors
@@ -83,25 +95,51 @@ export default function NewHandBillPage() {
     setLoading(true)
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      // Create customer if needed
+      let customerId = customer.id
       
-      const handBillData = {
-        id: String(Date.now()),
-        bill_number: formData.bill_number.toUpperCase(),
-        bill_date: formData.bill_date,
-        total_amount: parseFloat(formData.total_amount),
-        tender_type: formData.tender_type,
-        customer_name: formData.customer_name,
-        status: 'pending',
-        image_url: capturedPhoto?.dataUrl || '',
-        image_size_kb: capturedPhoto?.sizeKB || 0,
-        store_name: 'Main Store', // TODO: Get from user context
-        store_id: 'store-1', // TODO: Get from user context
-        notes: formData.notes || null,
-        created_at: new Date().toISOString()
+      if (!customerId && customer.name && customer.phone) {
+        const newCustomer = await createCustomer({
+          customer_name: customer.name,
+          phone: customer.phone,
+          email: customer.email || undefined
+        })
+        customerId = newCustomer.id
       }
 
-      console.log('Creating hand bill:', handBillData)
+      // Upload image to storage - this is REQUIRED for handbills
+      let imageUrl: string | undefined
+      if (capturedPhoto?.dataUrl) {
+        console.log('Uploading handbill image...')
+        const imagePath = generateImagePath(formData.store_id, 'handbill')
+        const uploadedUrl = await uploadImage('handbills', imagePath, capturedPhoto.dataUrl)
+        
+        if (!uploadedUrl) {
+          // Image upload failed - abort the entire operation
+          throw new Error('Image upload failed. Handbill creation requires a valid image.')
+        }
+        
+        imageUrl = uploadedUrl
+        console.log('Image uploaded successfully:', imageUrl)
+      } else {
+        // No image captured - this should never happen due to validation, but fail safe
+        throw new Error('No image provided. Handbill creation requires an image.')
+      }
+
+      const handBillData = {
+        store_id: formData.store_id,
+        bill_date: formData.bill_date,
+        bill_number: formData.bill_number.toUpperCase(),
+        total_amount: parseFloat(formData.total_amount),
+        tender_type: formData.tender_type,
+        customer_name: customer.name,
+        image_url: imageUrl,
+        status: 'pending' as const,
+        notes: formData.notes || undefined
+      }
+
+      console.log('Creating handbill record with image URL:', imageUrl)
+      await createHandBill(handBillData)
       
       toast.success(`Hand bill ${formData.bill_number.toUpperCase()} created successfully!`)
       
@@ -110,6 +148,7 @@ export default function NewHandBillPage() {
       }, 1000)
       
     } catch (error) {
+      console.error('Error creating hand bill:', error)
       toast.error("Failed to create hand bill. Please try again.")
     } finally {
       setLoading(false)
@@ -200,6 +239,38 @@ export default function NewHandBillPage() {
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-6">
                   
+                  {/* Store Selection - Only show dropdown for multi-store users */}
+                  {canAccessMultipleStores ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="store">Store *</Label>
+                      <Select 
+                        value={formData.store_id} 
+                        onValueChange={(value) => handleInputChange('store_id', value)}
+                      >
+                        <SelectTrigger id="store" className="h-12">
+                          <SelectValue placeholder="Select store" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {accessibleStores.map((store) => (
+                            <SelectItem key={store.id} value={store.id}>
+                              {store.store_name} ({store.store_code})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : (
+                    /* Single store users - Show current store as read-only */
+                    <div className="space-y-2">
+                      <Label htmlFor="store">Store</Label>
+                      <div className="h-12 px-3 py-2 border border-input bg-muted rounded-md flex items-center">
+                        <span className="text-sm">
+                          {currentStore ? `${currentStore.store_name} (${currentStore.store_code})` : 'Loading...'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  
                   {/* Bill Information */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
@@ -266,23 +337,6 @@ export default function NewHandBillPage() {
                     </div>
                   </div>
 
-                  {/* Customer Information */}
-                  <div className="space-y-2">
-                    <Label htmlFor="customer_name">Customer Name *</Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="customer_name"
-                        placeholder="Customer name or Walk-in Customer"
-                        value={formData.customer_name}
-                        onChange={(e) => handleInputChange('customer_name', e.target.value)}
-                        className="pl-10"
-                        required
-                      />
-                    </div>
-                  </div>
-
-
                   {/* Bill Image */}
                   <div className="space-y-2">
                     <Label>Hand Bill Image *</Label>
@@ -330,6 +384,22 @@ export default function NewHandBillPage() {
                       </Card>
                     )}
                   </div>
+
+                  {/* Customer Information - shown after image capture */}
+                  {capturedPhoto && (
+                    <div className="space-y-3">
+                      <div className="border-t pt-6">
+                        <h3 className="text-lg font-medium mb-2">Customer Information</h3>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          Enter customer details based on the captured bill image
+                        </p>
+                        <CustomerLookup 
+                          onCustomerSelect={setCustomer}
+                          allowNewCustomer={true}
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   {/* Notes */}
                   <div className="space-y-2">

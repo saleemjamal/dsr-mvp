@@ -13,76 +13,14 @@ import { Separator } from "@/components/ui/separator"
 import { ArrowLeft, Search, Gift, User, Calendar, IndianRupee, CreditCard, AlertTriangle, CheckCircle } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
-
-const mockVouchers = [
-  {
-    id: "1",
-    voucher_number: "GV2025001",
-    amount: 1000.00,
-    balance: 1000.00,
-    status: "active",
-    customer_name: "Rahul Sharma",
-    customer_phone: "+91 9876543001",
-    issued_date: "2025-01-20",
-    expiry_date: "2025-12-31",
-    created_at: "2025-01-20T10:30:00Z"
-  },
-  {
-    id: "2",
-    voucher_number: "GV2025002", 
-    amount: 500.00,
-    balance: 500.00,
-    status: "active",
-    customer_name: "Priya Patel",
-    customer_phone: "+91 9876543002",
-    issued_date: "2025-01-19",
-    expiry_date: "2025-06-30",
-    created_at: "2025-01-19T14:20:00Z"
-  },
-  {
-    id: "3",
-    voucher_number: "GV2025003",
-    amount: 2000.00,
-    balance: 0.00,
-    status: "redeemed",
-    customer_name: "Amit Kumar",
-    customer_phone: "+91 9876543003",
-    issued_date: "2025-01-18",
-    expiry_date: "2025-12-31",
-    created_at: "2025-01-18T09:15:00Z"
-  },
-  {
-    id: "4",
-    voucher_number: "GV2025004",
-    amount: 1500.00,
-    balance: 1500.00,
-    status: "active",
-    customer_name: "Sneha Singh",
-    customer_phone: "+91 9876543004",
-    issued_date: "2025-01-15",
-    expiry_date: "2025-02-15",
-    created_at: "2025-01-15T16:45:00Z"
-  },
-  {
-    id: "5",
-    voucher_number: "GV2024999",
-    amount: 800.00,
-    balance: 800.00,
-    status: "expired",
-    customer_name: "Vikram Gupta",
-    customer_phone: "+91 9876543005",
-    issued_date: "2024-12-20",
-    expiry_date: "2025-01-20",
-    created_at: "2024-12-20T11:10:00Z"
-  }
-]
+import { getVoucherByNumber, redeemVoucher, type GiftVoucher } from "@/lib/gift-vouchers-service"
 
 export default function RedeemVoucherPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [voucherNumber, setVoucherNumber] = useState("")
   const [purchaseAmount, setPurchaseAmount] = useState("")
-  const [voucher, setVoucher] = useState(null)
+  const [voucher, setVoucher] = useState<GiftVoucher | null>(null)
   const [loading, setLoading] = useState(false)
   const [redeeming, setRedeeming] = useState(false)
   
@@ -104,11 +42,7 @@ export default function RedeemVoucherPage() {
     setLoading(true)
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 800))
-      
-      const foundVoucher = mockVouchers.find(v => 
-        v.voucher_number.toLowerCase() === lookupNumber.toLowerCase()
-      )
+      const foundVoucher = await getVoucherByNumber(lookupNumber.trim())
       
       if (!foundVoucher) {
         toast.error("Voucher not found")
@@ -122,13 +56,14 @@ export default function RedeemVoucherPage() {
         toast.error("This voucher has expired")
       } else if (foundVoucher.status === 'redeemed') {
         toast.error("This voucher has already been fully redeemed")
-      } else if (new Date(foundVoucher.expiry_date) <= new Date()) {
+      } else if (foundVoucher.expiry_date && new Date(foundVoucher.expiry_date) <= new Date()) {
         toast.error("This voucher has expired")
       } else {
         toast.success("Voucher found and ready for redemption")
       }
       
     } catch (error) {
+      console.error('Error looking up voucher:', error)
       toast.error("Failed to lookup voucher")
       setVoucher(null)
     } finally {
@@ -137,7 +72,7 @@ export default function RedeemVoucherPage() {
   }
 
   const handleRedeem = async () => {
-    if (!voucher) return
+    if (!voucher || !voucher.id) return
     
     const amount = parseFloat(purchaseAmount)
     if (!purchaseAmount || isNaN(amount) || amount <= 0) {
@@ -158,13 +93,13 @@ export default function RedeemVoucherPage() {
     setRedeeming(true)
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      const updatedVoucher = await redeemVoucher(voucher.voucher_number, amount, `REDEEM-${Date.now()}`)
       
-      console.log('Redeeming voucher:', {
-        voucher_id: voucher.id,
-        voucher_number: voucher.voucher_number,
+      console.log('Voucher redeemed:', {
+        voucher_id: updatedVoucher.id,
+        voucher_number: updatedVoucher.voucher_number,
         amount_redeemed: amount,
-        remaining_balance: voucher.balance - amount,
+        remaining_balance: updatedVoucher.balance,
         redeemed_at: new Date().toISOString()
       })
       
@@ -175,7 +110,8 @@ export default function RedeemVoucherPage() {
       }, 2000)
       
     } catch (error) {
-      toast.error("Failed to redeem voucher. Please try again.")
+      console.error('Error redeeming voucher:', error)
+      toast.error(`Failed to redeem voucher: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setRedeeming(false)
     }
@@ -191,10 +127,10 @@ export default function RedeemVoucherPage() {
   const isVoucherRedeemable = voucher && 
     voucher.status === 'active' && 
     voucher.balance > 0 &&
-    new Date(voucher.expiry_date) > new Date()
+    (!voucher.expiry_date || new Date(voucher.expiry_date) > new Date())
 
-  const getStatusBadge = (status: string, expiryDate: string) => {
-    const isExpired = new Date(expiryDate) <= new Date()
+  const getStatusBadge = (status: string, expiryDate?: string) => {
+    const isExpired = expiryDate && new Date(expiryDate) <= new Date()
     
     if (isExpired) {
       return <Badge variant="destructive">Expired</Badge>
@@ -332,12 +268,12 @@ export default function RedeemVoucherPage() {
                         <Calendar className="h-4 w-4 text-muted-foreground" />
                         <div>
                           <p className="font-medium">
-                            {new Date(voucher.expiry_date).toLocaleDateString('en-IN')}
+                            {voucher.expiry_date ? new Date(voucher.expiry_date).toLocaleDateString('en-IN') : 'No expiry'}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {new Date(voucher.expiry_date) > new Date() 
+                            {voucher.expiry_date && new Date(voucher.expiry_date) > new Date() 
                               ? `${Math.ceil((new Date(voucher.expiry_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days left`
-                              : 'Expired'
+                              : voucher.expiry_date ? 'Expired' : 'Never expires'
                             }
                           </p>
                         </div>
@@ -440,7 +376,7 @@ export default function RedeemVoucherPage() {
                       <AlertTriangle className="mx-auto h-12 w-12 text-red-500 mb-4" />
                       <h3 className="font-medium text-lg mb-2">Cannot Redeem Voucher</h3>
                       <p className="text-muted-foreground mb-4">
-                        {voucher.status === 'expired' || new Date(voucher.expiry_date) <= new Date()
+                        {voucher.status === 'expired' || (voucher.expiry_date && new Date(voucher.expiry_date) <= new Date())
                           ? "This voucher has expired and cannot be redeemed."
                           : voucher.status === 'redeemed' 
                           ? "This voucher has already been fully redeemed."

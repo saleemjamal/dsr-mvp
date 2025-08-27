@@ -1,185 +1,246 @@
+"use client"
+
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { BarChart3, TrendingUp, Download, Calendar, Construction } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { BarChart3, FileText, TrendingUp, Calculator, Building, Zap, Download, Eye } from "lucide-react"
+import Link from "next/link"
+import { PermissionGuard } from "@/components/auth/PermissionGuard"
+import { Permission } from "@/lib/permissions"
 
-// Mock report data
-const mockReports = [
+const reportCategories = [
   {
-    id: "1",
-    title: "Daily Sales Summary",
-    description: "Comprehensive daily sales report across all stores",
-    type: "Sales",
-    status: "Ready",
-    lastGenerated: "2025-01-22T10:30:00Z"
+    title: "Financial Reports",
+    description: "Revenue, expenses, and profitability analysis",
+    icon: BarChart3,
+    color: "bg-blue-100 text-blue-600",
+    reports: [
+      {
+        name: "Daily Sales Summary",
+        description: "Complete sales breakdown by store and payment method",
+        href: "/reports/financial/daily-sales-summary",
+        permissions: [Permission.VIEW_SALES]
+      },
+      {
+        name: "Expense Report", 
+        description: "Categorized expenses with approval status",
+        href: "/reports/financial/expense-report",
+        permissions: [Permission.VIEW_EXPENSES]
+      },
+      {
+        name: "Profit & Loss",
+        description: "Income statement with period comparisons",
+        href: "/reports/financial/profit-loss",
+        permissions: [Permission.VIEW_REPORTS]
+      },
+      {
+        name: "Cash Flow Statement",
+        description: "Cash inflows and outflows analysis",
+        href: "/reports/financial/cash-flow",
+        permissions: [Permission.VIEW_CASH_MANAGEMENT]
+      }
+    ]
   },
   {
-    id: "2",
-    title: "Expense Analysis",
-    description: "Monthly expense breakdown by category and store",
-    type: "Expenses",
-    status: "Ready",
-    lastGenerated: "2025-01-22T09:15:00Z"
+    title: "Operational Reports",
+    description: "Store performance and transaction monitoring",
+    icon: Building,
+    color: "bg-green-100 text-green-600",
+    reports: [
+      {
+        name: "Store Performance",
+        description: "Sales metrics and KPIs by location",
+        href: "/reports/operational/store-performance",
+        permissions: [Permission.VIEW_REPORTS]
+      },
+      {
+        name: "Transaction Log",
+        description: "Complete audit trail of all transactions",
+        href: "/reports/operational/transaction-log", 
+        permissions: [Permission.VIEW_REPORTS]
+      },
+      {
+        name: "Cash Variance Report",
+        description: "Daily cash counting and variance analysis",
+        href: "/reports/operational/variance-report",
+        permissions: [Permission.VIEW_CASH_MANAGEMENT]
+      }
+    ]
   },
   {
-    id: "3",
-    title: "Cash Reconciliation",
-    description: "Daily cash variance and reconciliation report",
-    type: "Finance",
-    status: "Processing",
-    lastGenerated: "2025-01-22T08:45:00Z"
+    title: "Compliance & Export",
+    description: "Tax reports and external system integrations",
+    icon: FileText,
+    color: "bg-orange-100 text-orange-600",
+    reports: [
+      {
+        name: "Tax Summary",
+        description: "GST and tax calculations for filing",
+        href: "/reports/compliance/tax-summary",
+        permissions: [Permission.VIEW_REPORTS]
+      },
+      {
+        name: "Tally Export",
+        description: "Export data in Tally-compatible formats",
+        href: "/reports/compliance/tally-export",
+        permissions: [Permission.EXPORT_DATA],
+        badge: "Popular"
+      },
+      {
+        name: "Audit Trail",
+        description: "Complete user activity and system logs",
+        href: "/reports/compliance/audit-trail",
+        permissions: [Permission.VIEW_REPORTS]
+      }
+    ]
+  },
+  {
+    title: "Analytics & Insights",
+    description: "Trends, forecasting, and business intelligence",
+    icon: TrendingUp,
+    color: "bg-purple-100 text-purple-600",
+    reports: [
+      {
+        name: "Sales Trends",
+        description: "Historical analysis and pattern identification",
+        href: "/reports/analytics/trends",
+        permissions: [Permission.VIEW_REPORTS]
+      },
+      {
+        name: "Period Comparisons",
+        description: "Month-over-month and year-over-year analysis",
+        href: "/reports/analytics/comparisons",
+        permissions: [Permission.VIEW_REPORTS]
+      },
+      {
+        name: "Forecasting",
+        description: "Predictive analytics for sales and expenses",
+        href: "/reports/analytics/forecasts",
+        permissions: [Permission.VIEW_REPORTS],
+        badge: "Beta"
+      }
+    ]
   }
 ]
 
 export default function ReportsPage() {
   return (
-    <div className="flex min-h-screen">
-      {/* Desktop Sidebar */}
-      <aside className="hidden lg:block w-64 border-r">
-        <Sidebar />
-      </aside>
-      
-      {/* Main Content */}
-      <div className="flex-1">
-        <Header />
+    <PermissionGuard permission={Permission.VIEW_REPORTS}>
+      <div className="flex min-h-screen">
+        <aside className="hidden lg:block w-64 border-r">
+          <Sidebar />
+        </aside>
         
-        <main className="p-6">
-          {/* Page Header */}
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h2 className="text-3xl font-bold tracking-tight">Reports</h2>
+        <div className="flex-1">
+          <Header />
+          
+          <main className="p-6">
+            {/* Page Header */}
+            <div className="mb-8">
+              <h2 className="text-3xl font-bold tracking-tight">Reports & Analytics</h2>
               <p className="text-muted-foreground">
-                Generate and download business reports and analytics
+                Comprehensive business intelligence and data export capabilities
               </p>
             </div>
-            <Button disabled>
-              <Calendar className="mr-2 h-4 w-4" />
-              Schedule Report
-            </Button>
-          </div>
 
-          {/* Quick Stats */}
-          <div className="grid gap-4 md:grid-cols-3 mb-8">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Available Reports</CardTitle>
-                <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            {/* Quick Actions - Streamlined */}
+            <Card className="mb-8">
+              <CardHeader>
+                <CardTitle className="text-lg">Quick Actions</CardTitle>
+                <CardDescription>Most commonly used reports and exports</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">12</div>
-                <p className="text-xs text-muted-foreground">
-                  Different report types
-                </p>
+                <div className="grid gap-2 md:grid-cols-2">
+                  <Link href="/reports/compliance/tally-export">
+                    <Button variant="outline" className="w-full justify-start" size="sm">
+                      <Download className="mr-2 h-4 w-4" />
+                      Export to Tally
+                      <Badge variant="secondary" className="ml-auto text-xs">Popular</Badge>
+                    </Button>
+                  </Link>
+                  
+                  <Link href="/reports/financial/daily-sales-summary">
+                    <Button variant="outline" className="w-full justify-start" size="sm">
+                      <Calculator className="mr-2 h-4 w-4" />
+                      Today's Sales Summary
+                    </Button>
+                  </Link>
+                  
+                  <Link href="/reports/operational/store-performance">
+                    <Button variant="outline" className="w-full justify-start" size="sm">
+                      <Building className="mr-2 h-4 w-4" />
+                      Store Performance
+                    </Button>
+                  </Link>
+                  
+                  <Link href="/reports/operational/variance-report">
+                    <Button variant="outline" className="w-full justify-start" size="sm">
+                      <Zap className="mr-2 h-4 w-4" />
+                      Cash Variance Report
+                    </Button>
+                  </Link>
+                </div>
               </CardContent>
             </Card>
-            
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">This Month</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">47</div>
-                <p className="text-xs text-muted-foreground">
-                  Reports generated
-                </p>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Most Used</CardTitle>
-                <Download className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">Daily Sales</div>
-                <p className="text-xs text-muted-foreground">
-                  Most popular report
-                </p>
-              </CardContent>
-            </Card>
-          </div>
 
-          {/* Available Reports */}
-          <Card className="mb-8">
-            <CardHeader>
-              <CardTitle>Available Reports</CardTitle>
-              <CardDescription>
-                Quick access to commonly used reports
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {mockReports.map((report) => (
-                  <div key={report.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <BarChart3 className="h-5 w-5 text-primary" />
+            {/* Report Categories - List View */}
+            <div className="space-y-6">
+              {reportCategories.map((category) => (
+                <Card key={category.title}>
+                  <CardHeader className="pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg ${category.color}`}>
+                        <category.icon className="h-5 w-5" />
                       </div>
                       <div>
-                        <h4 className="font-medium">{report.title}</h4>
-                        <p className="text-sm text-muted-foreground">{report.description}</p>
-                        <div className="flex items-center space-x-2 mt-1">
-                          <Badge variant="secondary">{report.type}</Badge>
-                          <Badge variant={report.status === 'Ready' ? 'default' : 'outline'}>
-                            {report.status}
-                          </Badge>
-                        </div>
+                        <CardTitle>{category.title}</CardTitle>
+                        <CardDescription>{category.description}</CardDescription>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <Button variant="outline" size="sm" disabled>
-                        <Download className="mr-2 h-4 w-4" />
-                        Generate
-                      </Button>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Last: {new Date(report.lastGenerated).toLocaleDateString('en-IN')}
-                      </p>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-1">
+                      {category.reports.map((report) => (
+                        <PermissionGuard 
+                          key={report.name} 
+                          permission={report.permissions[0]}
+                          fallback={null}
+                        >
+                          <Link href={report.href}>
+                            <div className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors group cursor-pointer">
+                              <div className="flex items-center gap-3">
+                                <div className="w-2 h-2 rounded-full bg-muted-foreground/30 group-hover:bg-primary transition-colors" />
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="font-medium text-sm group-hover:text-primary transition-colors">
+                                      {report.name}
+                                    </h4>
+                                    {report.badge && (
+                                      <Badge variant="secondary" className="text-xs">
+                                        {report.badge}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">
+                                    {report.description}
+                                  </p>
+                                </div>
+                              </div>
+                              <Eye className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                            </div>
+                          </Link>
+                        </PermissionGuard>
+                      ))}
                     </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Coming Soon Notice */}
-          <Card className="max-w-2xl mx-auto">
-            <CardHeader className="text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-                <Construction className="h-8 w-8 text-muted-foreground" />
-              </div>
-              <CardTitle className="mt-4">Advanced Reports - Coming Soon</CardTitle>
-              <CardDescription>
-                Full reporting functionality is being developed and will include:
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div className="space-y-2">
-                  <h4 className="font-medium">Report Features:</h4>
-                  <ul className="space-y-1 text-muted-foreground">
-                    <li>• Custom date ranges</li>
-                    <li>• Multiple export formats</li>
-                    <li>• Scheduled reports</li>
-                    <li>• Email delivery</li>
-                  </ul>
-                </div>
-                <div className="space-y-2">
-                  <h4 className="font-medium">Report Types:</h4>
-                  <ul className="space-y-1 text-muted-foreground">
-                    <li>• Sales analytics</li>
-                    <li>• Expense tracking</li>
-                    <li>• Cash reconciliation</li>
-                    <li>• Voucher liability</li>
-                  </ul>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </main>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+    </PermissionGuard>
   )
 }

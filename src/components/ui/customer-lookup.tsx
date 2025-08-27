@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
@@ -8,45 +8,14 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { User, Phone, Mail, Plus, Search, UserPlus } from "lucide-react"
 import { toast } from "sonner"
+import { searchCustomers, createCustomer, CustomerSearchResult } from "@/lib/customer-service"
 
-const mockCustomers = [
-  {
-    id: "1",
-    name: "Rahul Sharma",
-    phone: "+91 9876543001",
-    email: "rahul.sharma@example.com"
-  },
-  {
-    id: "2",
-    name: "Priya Patel", 
-    phone: "+91 9876543002",
-    email: "priya.patel@example.com"
-  },
-  {
-    id: "3",
-    name: "Amit Kumar",
-    phone: "+91 9876543003",
-    email: ""
-  },
-  {
-    id: "4",
-    name: "Sneha Singh",
-    phone: "+91 9876543004", 
-    email: "sneha.singh@example.com"
-  },
-  {
-    id: "5",
-    name: "Vikram Gupta",
-    phone: "+91 9876543005",
-    email: "vikram.gupta@example.com"
-  }
-]
 
 interface Customer {
   id: string
   name: string
   phone: string
-  email: string
+  email?: string
 }
 
 interface CustomerLookupProps {
@@ -66,6 +35,7 @@ export function CustomerLookup({ onCustomerSelect, initialPhone = "", allowNewCu
     phone: '',
     email: ''
   })
+  const justCreatedCustomer = useRef(false)
 
   useEffect(() => {
     if (initialPhone) {
@@ -77,14 +47,21 @@ export function CustomerLookup({ onCustomerSelect, initialPhone = "", allowNewCu
     const lookupPhone = searchPhone || phone
     if (!lookupPhone.trim()) return
 
+    console.log('Starting customer lookup for:', lookupPhone)
     setLoading(true)
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 500))
+      console.log('Calling searchCustomers with:', lookupPhone)
+      const results = await searchCustomers(lookupPhone)
+      console.log('Search results:', results)
       
-      const foundCustomer = mockCustomers.find(c => c.phone === lookupPhone)
-      
-      if (foundCustomer) {
+      if (results.length > 0) {
+        const foundCustomer = {
+          id: results[0].id,
+          name: results[0].customer_name,
+          phone: results[0].phone || '',
+          email: results[0].email || ''
+        }
         setCustomer(foundCustomer)
         setShowNewCustomerForm(false)
         onCustomerSelect(foundCustomer)
@@ -100,8 +77,10 @@ export function CustomerLookup({ onCustomerSelect, initialPhone = "", allowNewCu
         onCustomerSelect(null)
       }
     } catch (error) {
-      toast.error("Failed to lookup customer")
+      console.error('Error in handleLookup:', error)
+      toast.error(`Failed to lookup customer: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
+      console.log('Setting loading to false')
       setLoading(false)
     }
   }
@@ -122,20 +101,24 @@ export function CustomerLookup({ onCustomerSelect, initialPhone = "", allowNewCu
     setLoading(true)
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 800))
-      
-      const existingCustomer = mockCustomers.find(c => c.phone === customerData.phone)
-      if (existingCustomer) {
+      const existingResults = await searchCustomers(customerData.phone)
+      if (existingResults.length > 0) {
         toast.error("Customer with this phone number already exists")
         setLoading(false)
         return
       }
       
-      const newCustomer: Customer = {
-        id: String(Date.now()),
-        name: customerData.name,
+      const createdCustomer = await createCustomer({
+        customer_name: customerData.name,
         phone: customerData.phone,
-        email: customerData.email
+        email: customerData.email || undefined
+      })
+      
+      const newCustomer: Customer = {
+        id: createdCustomer.id!,
+        name: createdCustomer.customer_name,
+        phone: createdCustomer.phone || '',
+        email: createdCustomer.email || ''
       }
       
       setCustomer(newCustomer)
@@ -146,10 +129,19 @@ export function CustomerLookup({ onCustomerSelect, initialPhone = "", allowNewCu
         setPhone(customerData.phone)
       }
       
-      onCustomerSelect(newCustomer)
-      toast.success("Customer created successfully!")
+      // Set flag to indicate customer was just created
+      justCreatedCustomer.current = true
       
-      console.log('Creating new customer:', newCustomer)
+      console.log('Customer created successfully, calling onCustomerSelect with:', newCustomer)
+      
+      // Notify parent component immediately
+      onCustomerSelect(newCustomer)
+      
+      // Clear the flag after a short delay
+      setTimeout(() => {
+        justCreatedCustomer.current = false
+        toast.success("Customer created successfully!")
+      }, 200)
       
       setNewCustomerData({ name: '', phone: '', email: '' })
       
@@ -370,7 +362,7 @@ export function CustomerLookup({ onCustomerSelect, initialPhone = "", allowNewCu
                   size="sm"
                   onClick={() => {
                     setShowNewCustomerForm(false)
-                    setNewCustomerData({ name: '', email: '' })
+                    setNewCustomerData({ name: '', phone: '', email: '' })
                   }}
                 >
                   Cancel

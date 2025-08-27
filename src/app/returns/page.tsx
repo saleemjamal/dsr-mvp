@@ -1,83 +1,27 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { getReturnsForDateRange, updateReturn, type ReturnSummary } from "@/lib/returns-service"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
+import { FilterBar, type FilterState } from "@/components/ui/filter-bar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { RotateCcw, Plus, Search, Calendar, IndianRupee, User, Receipt, CheckCircle, Clock, AlertTriangle } from "lucide-react"
+import { RotateCcw, Plus, Search, Calendar, IndianRupee, User, Receipt, CheckCircle, Clock, AlertTriangle, Loader2, Eye, Edit } from "lucide-react"
 import Link from "next/link"
+import { format } from "date-fns"
+import { useAuth } from "@/contexts/auth-context"
+import { useStore } from "@/contexts/store-context"
+import { canEditTransaction } from "@/lib/reconciliation-service"
+import { toast } from "sonner"
 
-const mockRRNs = [
-  {
-    id: "1",
-    rrn_number: "RRN001",
-    sales_bill_number: "BILL-2025-001",
-    rrn_date: "2025-01-22",
-    rrn_amount: 850.00,
-    balance: 850.00,
-    tender_type: "cash",
-    customer_name: "Rahul Sharma",
-    customer_phone: "+91 9876543001",
-    return_reason: "defective",
-    status: "active",
-    expiry_date: "2026-01-22",
-    remarks: "Shirt had a tear on the sleeve",
-    created_at: "2025-01-22T10:30:00Z"
-  },
-  {
-    id: "2",
-    rrn_number: "RRN002", 
-    sales_bill_number: "BILL-2025-002",
-    rrn_date: "2025-01-21",
-    rrn_amount: 1250.00,
-    balance: 0.00,
-    tender_type: "upi",
-    customer_name: "Priya Patel",
-    customer_phone: "+91 9876543002",
-    return_reason: "wrong_size",
-    status: "redeemed",
-    expiry_date: "2026-01-21",
-    remarks: "Size L needed instead of M",
-    created_at: "2025-01-21T14:20:00Z"
-  },
-  {
-    id: "3",
-    rrn_number: "RRN003",
-    sales_bill_number: "BILL-2025-003", 
-    rrn_date: "2025-01-20",
-    rrn_amount: 650.00,
-    balance: 650.00,
-    tender_type: "credit_card",
-    customer_name: "Amit Kumar",
-    customer_phone: "+91 9876543003",
-    return_reason: "change_of_mind",
-    status: "active",
-    expiry_date: "2026-01-20",
-    remarks: "",
-    created_at: "2025-01-20T09:15:00Z"
-  },
-  {
-    id: "4",
-    rrn_number: "RRN004",
-    sales_bill_number: "BILL-2024-999",
-    rrn_date: "2024-03-15",
-    rrn_amount: 400.00,
-    balance: 400.00,
-    tender_type: "cash",
-    customer_name: "Sneha Singh",
-    customer_phone: "+91 9876543004",
-    return_reason: "other",
-    status: "expired",
-    expiry_date: "2025-03-15",
-    remarks: "Customer moved to different city",
-    created_at: "2024-03-15T16:45:00Z"
-  }
-]
 
 const getStatusBadge = (status: string, expiryDate: string) => {
   const isExpiringSoon = new Date(expiryDate) <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
@@ -144,15 +88,89 @@ const getReturnReasonBadge = (reason: string) => {
 }
 
 export default function RRNsPage() {
-  const [rrns] = useState(mockRRNs)
+  const { profile } = useAuth()
+  const { accessibleStores } = useStore()
+  const [returns, setReturns] = useState<ReturnSummary[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filters, setFilters] = useState<FilterState | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedRRN, setSelectedRRN] = useState(null)
+  
+  // Edit return state
+  const [editingReturn, setEditingReturn] = useState<ReturnSummary | null>(null)
+  const [editLoading, setEditLoading] = useState(false)
+  const [editFormData, setEditFormData] = useState({
+    original_bill_reference: '',
+    return_amount: '',
+    refund_method: '',
+    customer_name: '',
+    reason: '',
+    notes: ''
+  })
 
-  const filteredRRNs = rrns.filter(rrn => 
-    rrn.rrn_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    rrn.sales_bill_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    rrn.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    rrn.customer_phone.includes(searchTerm)
+  // Initialize default filters on mount  
+  useEffect(() => {
+    if (!filters) {
+      // Set default to "Today" if no filters set yet
+      const today = new Date()
+      setFilters({
+        dateRange: {
+          from: today,
+          to: today,
+          preset: 'Today'
+        },
+        storeIds: [], // Will be set by FilterBar based on user permissions
+        storeId: null // All stores by default
+      })
+    }
+  }, [filters])
+
+  // Load returns data when filters change
+  useEffect(() => {
+    if (!filters || !profile || !accessibleStores || accessibleStores.length === 0) {
+      return
+    }
+
+    const loadReturnsData = async () => {
+      try {
+        setLoading(true)
+        const fromDate = format(filters.dateRange.from, 'yyyy-MM-dd')
+        const toDate = format(filters.dateRange.to, 'yyyy-MM-dd')
+        
+        // Get user's accessible stores
+        const userStoreIds = accessibleStores.map(store => store.id)
+        
+        // Determine store filter based on selection
+        let storeFilter: string[] | null = null
+        if (filters.storeId === null) {
+          // "All Stores" selected - use user's accessible stores
+          storeFilter = userStoreIds
+        } else {
+          // Specific store selected
+          storeFilter = [filters.storeId]
+        }
+        
+        const returnsData = await getReturnsForDateRange(fromDate, toDate, storeFilter)
+        setReturns(returnsData || [])
+      } catch (error) {
+        console.error('Error loading returns:', error)
+        toast.error('Failed to load returns data')
+        setReturns([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadReturnsData()
+  }, [filters, profile, accessibleStores])
+
+  const handleFiltersChange = (newFilters: FilterState) => {
+    setFilters(newFilters)
+  }
+
+  const filteredRRNs = returns.filter(returnItem => 
+    returnItem.original_bill_reference?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    returnItem.customer_name?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   const formatCurrency = (amount: number) => {
@@ -162,16 +180,72 @@ export default function RRNsPage() {
     }).format(amount)
   }
 
-  const totalRRNs = rrns.length
-  const activeRRNs = rrns.filter(r => r.status === 'active').length
-  const totalLiability = rrns
-    .filter(r => r.status === 'active')
-    .reduce((sum, r) => sum + r.balance, 0)
-  const expiringSoon = rrns.filter(r => {
-    const isActive = r.status === 'active'
-    const isExpiringSoon = new Date(r.expiry_date) <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-    return isActive && isExpiringSoon
-  }).length
+  const totalRRNs = returns.length
+  const totalAmount = returns.reduce((sum, r) => sum + r.return_amount, 0)
+  const totalCount = returns.length
+
+  const handleEditReturn = (returnItem: ReturnSummary) => {
+    setEditingReturn(returnItem)
+    setEditFormData({
+      original_bill_reference: returnItem.original_bill_reference,
+      return_amount: returnItem.return_amount.toString(),
+      refund_method: returnItem.refund_method,
+      customer_name: returnItem.customer_name,
+      reason: returnItem.reason || '',
+      notes: '' // Notes from full return data would need separate fetch
+    })
+  }
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingReturn) return
+
+    setEditLoading(true)
+    try {
+      const amount = parseFloat(editFormData.return_amount)
+      if (isNaN(amount) || amount <= 0) {
+        toast.error('Please enter a valid return amount')
+        return
+      }
+
+      await updateReturn(editingReturn.id, {
+        original_bill_reference: editFormData.original_bill_reference,
+        return_amount: amount,
+        refund_method: editFormData.refund_method,
+        customer_name: editFormData.customer_name,
+        reason: editFormData.reason,
+        notes: editFormData.notes
+      })
+
+      // Update local state
+      setReturns(prev => prev.map(returnItem => 
+        returnItem.id === editingReturn.id 
+          ? { 
+              ...returnItem, 
+              original_bill_reference: editFormData.original_bill_reference,
+              return_amount: amount, 
+              refund_method: editFormData.refund_method,
+              customer_name: editFormData.customer_name,
+              reason: editFormData.reason
+            }
+          : returnItem
+      ))
+
+      toast.success('Return updated successfully!')
+      setEditingReturn(null)
+      setEditFormData({ original_bill_reference: '', return_amount: '', refund_method: '', customer_name: '', reason: '', notes: '' })
+    } catch (error) {
+      console.error('Error updating return:', error)
+      toast.error('Failed to update return. Please try again.')
+    } finally {
+      setEditLoading(false)
+    }
+  }
+
+  const handleEditCancel = () => {
+    setEditingReturn(null)
+    setEditFormData({ original_bill_reference: '', return_amount: '', refund_method: '', customer_name: '', reason: '', notes: '' })
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -185,97 +259,92 @@ export default function RRNsPage() {
         <main className="p-6">
           <div className="flex items-center justify-between mb-8">
             <div>
-              <h2 className="text-3xl font-bold tracking-tight">Return Receipt Notes (RRN)</h2>
+              <h2 className="text-3xl font-bold tracking-tight">Returns</h2>
               <p className="text-muted-foreground">
-                Manage store credit notes for customer returns
+                Manage product returns and refunds
               </p>
             </div>
             <div className="flex gap-2">
               <Link href="/returns/new">
                 <Button>
                   <Plus className="mr-2 h-4 w-4" />
-                  Issue RRN
-                </Button>
-              </Link>
-              <Link href="/returns/redeem-for-sale">
-                <Button variant="outline">
-                  <RotateCcw className="mr-2 h-4 w-4" />
-                  Redeem RRN
+                  Process Return
                 </Button>
               </Link>
             </div>
           </div>
 
+          {/* Filter Bar */}
+          <FilterBar 
+            onFiltersChange={handleFiltersChange} 
+            showStoreFilter={true}
+            showDateFilter={true}
+          />
+
           {/* Summary Stats */}
-          <div className="grid gap-4 md:grid-cols-4 mb-8">
+          {!loading && filters && (
+          <div className="grid gap-4 md:grid-cols-3 mb-8">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total RRNs</CardTitle>
+                <CardTitle className="text-sm font-medium">Total Returns</CardTitle>
                 <RotateCcw className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{totalRRNs}</div>
+                <div className="text-2xl font-bold">{totalCount}</div>
                 <p className="text-xs text-muted-foreground">
-                  All return notes
+                  {filters.dateRange.preset || 'Custom period'}
                 </p>
               </CardContent>
             </Card>
             
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Active RRNs</CardTitle>
-                <CheckCircle className="h-4 w-4 text-green-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600">{activeRRNs}</div>
-                <p className="text-xs text-muted-foreground">
-                  Available for redemption
-                </p>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Liability</CardTitle>
+                <CardTitle className="text-sm font-medium">Total Amount</CardTitle>
                 <IndianRupee className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(totalLiability)}</div>
+                <div className="text-2xl font-bold">{formatCurrency(totalAmount)}</div>
                 <p className="text-xs text-muted-foreground">
-                  Outstanding balance
+                  Returned value
                 </p>
               </CardContent>
             </Card>
             
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Expiring Soon</CardTitle>
-                <AlertTriangle className="h-4 w-4 text-orange-500" />
+                <CardTitle className="text-sm font-medium">Average Return</CardTitle>
+                <IndianRupee className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-orange-600">{expiringSoon}</div>
+                <div className="text-2xl font-bold">
+                  {totalCount > 0 ? formatCurrency(totalAmount / totalCount) : formatCurrency(0)}
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  Within 30 days
+                  Per transaction
                 </p>
               </CardContent>
             </Card>
           </div>
+          )}
 
-          {/* RRN Table */}
+          {/* Returns Table */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>All Return Receipt Notes ({filteredRRNs.length})</CardTitle>
+                  <CardTitle>Returns {!loading && `(${filteredRRNs.length})`}</CardTitle>
                   <CardDescription>
-                    Track and manage store credit notes and redemptions
+                    {filters?.dateRange ? 
+                      `Returns from ${format(filters.dateRange.from, 'MMM dd')} - ${format(filters.dateRange.to, 'MMM dd, yyyy')}` :
+                      'Track and manage product returns and refunds'
+                    }
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="relative">
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
-                      placeholder="Search RRNs..."
+                      placeholder="Search returns..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="pl-8 w-[300px]"
@@ -285,60 +354,57 @@ export default function RRNsPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                  <span className="ml-2">Loading returns...</span>
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>RRN Details</TableHead>
+                      <TableHead>Return Details</TableHead>
                       <TableHead>Customer Info</TableHead>
-                      <TableHead>Amount & Balance</TableHead>
+                      <TableHead>Amount & Method</TableHead>
                       <TableHead>Return Reason</TableHead>
-                      <TableHead>Validity</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>Date</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredRRNs.map((rrn) => (
-                      <TableRow key={rrn.id}>
+                    {filteredRRNs.map((returnItem) => (
+                      <TableRow key={returnItem.id}>
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <div className="p-2 bg-primary/10 rounded-lg">
                               <RotateCcw className="h-4 w-4 text-primary" />
                             </div>
                             <div>
-                              <p className="font-medium">{rrn.rrn_number}</p>
-                              <p className="text-sm text-muted-foreground">
-                                Bill: {rrn.sales_bill_number}
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                {new Date(rrn.rrn_date).toLocaleDateString('en-IN')}
-                              </p>
+                              <p className="font-medium">{returnItem.original_bill_reference}</p>
+                              <p className="text-sm text-muted-foreground">{returnItem.stores?.store_name}</p>
                             </div>
                           </div>
                         </TableCell>
                         <TableCell>
                           <div>
-                            <p className="font-medium">{rrn.customer_name}</p>
-                            <p className="text-sm text-muted-foreground">{rrn.customer_phone}</p>
+                            <p className="font-medium">{returnItem.customer_name}</p>
                           </div>
                         </TableCell>
                         <TableCell>
                           <div>
-                            <p className="font-medium">{formatCurrency(rrn.rrn_amount)}</p>
+                            <p className="font-medium">{formatCurrency(returnItem.return_amount)}</p>
                             <p className="text-sm text-muted-foreground">
-                              Balance: {formatCurrency(rrn.balance)}
+                              {returnItem.refund_method?.replace('_', ' ').toUpperCase()}
                             </p>
                           </div>
                         </TableCell>
                         <TableCell>
                           <div>
-                            {getReturnReasonBadge(rrn.return_reason)}
-                            {rrn.remarks && (
-                              <p className="text-xs text-muted-foreground mt-1 max-w-[150px] truncate">
-                                {rrn.remarks}
-                              </p>
-                            )}
+                            <p className="text-sm text-muted-foreground">
+                              {returnItem.reason || 'Not specified'}
+                            </p>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -346,132 +412,223 @@ export default function RRNsPage() {
                             <Calendar className="h-4 w-4 text-muted-foreground" />
                             <div>
                               <p className="text-sm font-medium">
-                                {new Date(rrn.expiry_date).toLocaleDateString('en-IN')}
+                                {new Date(returnItem.return_date).toLocaleDateString('en-IN')}
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                {new Date(rrn.expiry_date) > new Date() 
-                                  ? `${Math.ceil((new Date(rrn.expiry_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days left`
-                                  : 'Expired'
-                                }
+                                {new Date(returnItem.created_at).toLocaleTimeString('en-IN')}
                               </p>
                             </div>
                           </div>
                         </TableCell>
                         <TableCell>
-                          {getStatusBadge(rrn.status, rrn.expiry_date)}
-                        </TableCell>
-                        <TableCell>
                           <div className="flex items-center gap-2">
+                            {canEditTransaction(returnItem.status || 'pending', profile?.role || 'cashier') && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEditReturn(returnItem)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            )}
                             <Dialog>
                               <DialogTrigger asChild>
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => setSelectedRRN(rrn)}
+                                  onClick={() => setSelectedRRN(returnItem)}
                                 >
-                                  View Details
+                                  <Eye className="h-4 w-4" />
                                 </Button>
                               </DialogTrigger>
                               <DialogContent className="max-w-md">
                                 <DialogHeader>
-                                  <DialogTitle>RRN Details</DialogTitle>
+                                  <DialogTitle>Return Details</DialogTitle>
                                   <DialogDescription>
-                                    Complete information for {rrn.rrn_number}
+                                    Complete information for {returnItem.original_bill_reference}
                                   </DialogDescription>
                                 </DialogHeader>
                                 <div className="space-y-4">
                                   <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                      <p className="text-sm font-medium">RRN Number</p>
-                                      <p className="text-sm text-muted-foreground">{rrn.rrn_number}</p>
+                                      <p className="text-sm font-medium">Original Bill</p>
+                                      <p className="text-sm text-muted-foreground">{returnItem.original_bill_reference}</p>
                                     </div>
                                     <div>
-                                      <p className="text-sm font-medium">Status</p>
-                                      {getStatusBadge(rrn.status, rrn.expiry_date)}
+                                      <p className="text-sm font-medium">Store</p>
+                                      <p className="text-sm text-muted-foreground">{returnItem.stores?.store_name}</p>
                                     </div>
                                   </div>
                                   
                                   <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                      <p className="text-sm font-medium">RRN Amount</p>
-                                      <p className="text-sm text-muted-foreground">{formatCurrency(rrn.rrn_amount)}</p>
+                                      <p className="text-sm font-medium">Return Amount</p>
+                                      <p className="text-sm text-muted-foreground">{formatCurrency(returnItem.return_amount)}</p>
                                     </div>
                                     <div>
-                                      <p className="text-sm font-medium">Available Balance</p>
-                                      <p className="text-sm font-semibold text-green-600">{formatCurrency(rrn.balance)}</p>
+                                      <p className="text-sm font-medium">Refund Method</p>
+                                      <p className="text-sm text-muted-foreground">{returnItem.refund_method?.replace('_', ' ').toUpperCase()}</p>
                                     </div>
                                   </div>
                                   
                                   <div>
                                     <p className="text-sm font-medium">Customer Details</p>
-                                    <p className="text-sm text-muted-foreground">{rrn.customer_name}</p>
-                                    <p className="text-sm text-muted-foreground">{rrn.customer_phone}</p>
+                                    <p className="text-sm text-muted-foreground">{returnItem.customer_name}</p>
                                   </div>
                                   
-                                  <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                      <p className="text-sm font-medium">Original Bill</p>
-                                      <p className="text-sm text-muted-foreground">{rrn.sales_bill_number}</p>
-                                    </div>
-                                    <div>
-                                      <p className="text-sm font-medium">Return Date</p>
-                                      <p className="text-sm text-muted-foreground">
-                                        {new Date(rrn.rrn_date).toLocaleDateString('en-IN')}
-                                      </p>
-                                    </div>
+                                  <div>
+                                    <p className="text-sm font-medium">Return Date</p>
+                                    <p className="text-sm text-muted-foreground">
+                                      {new Date(returnItem.return_date).toLocaleDateString('en-IN')}
+                                    </p>
                                   </div>
                                   
                                   <div>
                                     <p className="text-sm font-medium">Return Reason</p>
-                                    {getReturnReasonBadge(rrn.return_reason)}
-                                    {rrn.remarks && (
-                                      <p className="text-sm text-muted-foreground mt-1">{rrn.remarks}</p>
-                                    )}
-                                  </div>
-                                  
-                                  <div>
-                                    <p className="text-sm font-medium">Expiry Date</p>
                                     <p className="text-sm text-muted-foreground">
-                                      {new Date(rrn.expiry_date).toLocaleDateString('en-IN')}
+                                      {returnItem.reason || 'Not specified'}
                                     </p>
                                   </div>
                                 </div>
                               </DialogContent>
                             </Dialog>
-                            
-                            {rrn.status === 'active' && rrn.balance > 0 && (
-                              <Link href={`/returns/redeem?rrn=${rrn.rrn_number}`}>
-                                <Button size="sm">
-                                  Redeem
-                                </Button>
-                              </Link>
-                            )}
                           </div>
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
-              </div>
-              
-              {filteredRRNs.length === 0 && (
-                <div className="text-center py-8">
-                  <RotateCcw className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">
-                    {searchTerm ? "No RRNs match your search" : "No RRNs found"}
-                  </p>
-                  {!searchTerm && (
-                    <Link href="/returns/new">
-                      <Button className="mt-2">
-                        <Plus className="mr-2 h-4 w-4" />
-                        Issue First RRN
-                      </Button>
-                    </Link>
+                  </div>
+                  
+                  {filteredRRNs.length === 0 && !loading && (
+                    <div className="text-center py-8">
+                      <RotateCcw className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                      <p className="text-muted-foreground">
+                        {searchTerm ? "No returns match your search" : "No returns found for the selected period"}
+                      </p>
+                      {!searchTerm && (
+                        <Link href="/returns/new">
+                          <Button className="mt-2">
+                            <Plus className="mr-2 h-4 w-4" />
+                            Process First Return
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
                   )}
-                </div>
+                </>
               )}
             </CardContent>
           </Card>
+
+          {/* Edit Return Dialog */}
+          <Dialog open={!!editingReturn} onOpenChange={(open) => !open && handleEditCancel()}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Edit Return</DialogTitle>
+                <DialogDescription>
+                  Update the return transaction details
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleEditSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit_bill_reference">Return Reference Number *</Label>
+                  <Input
+                    id="edit_bill_reference"
+                    type="text"
+                    placeholder="Original bill reference"
+                    value={editFormData.original_bill_reference}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, original_bill_reference: e.target.value }))}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_return_amount">Return Amount (₹) *</Label>
+                  <div className="relative">
+                    <IndianRupee className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="edit_return_amount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={editFormData.return_amount}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, return_amount: e.target.value }))}
+                      className="pl-10"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_refund_method">Refund Method *</Label>
+                  <Select value={editFormData.refund_method} onValueChange={(value) => setEditFormData(prev => ({ ...prev, refund_method: value }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select refund method" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="upi">UPI</SelectItem>
+                      <SelectItem value="credit_card">Credit Card</SelectItem>
+                      <SelectItem value="store_credit">Store Credit</SelectItem>
+                      <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_customer_name">Customer Name *</Label>
+                  <Input
+                    id="edit_customer_name"
+                    type="text"
+                    placeholder="Customer name"
+                    value={editFormData.customer_name}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, customer_name: e.target.value }))}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_reason">Return Reason</Label>
+                  <Select value={editFormData.reason} onValueChange={(value) => setEditFormData(prev => ({ ...prev, reason: value }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select return reason" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="defective">Defective/Damaged</SelectItem>
+                      <SelectItem value="wrong_size">Wrong Size</SelectItem>
+                      <SelectItem value="wrong_item">Wrong Item</SelectItem>
+                      <SelectItem value="not_as_described">Not as Described</SelectItem>
+                      <SelectItem value="change_of_mind">Change of Mind</SelectItem>
+                      <SelectItem value="duplicate_order">Duplicate Order</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_notes">Notes</Label>
+                  <Textarea
+                    id="edit_notes"
+                    placeholder="Any additional notes..."
+                    value={editFormData.notes}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, notes: e.target.value }))}
+                    className="min-h-[80px]"
+                  />
+                </div>
+
+                <div className="flex justify-end space-x-2">
+                  <Button type="button" variant="outline" onClick={handleEditCancel}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={editLoading}>
+                    {editLoading ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
         </main>
       </div>
     </div>

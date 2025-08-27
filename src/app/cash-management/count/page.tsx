@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
@@ -10,20 +10,19 @@ import { DenominationCounter } from "@/components/ui/denomination-counter"
 import { ArrowLeft, Save, Calculator, IndianRupee, AlertTriangle, CheckCircle } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
+import { submitCashCount, calculateExpectedCashAmount, getDefaultStore, type DenominationCount } from "@/lib/cash-service"
 
-interface DenominationCount {
-  [key: number]: number
-}
-
-// Mock expected amounts - in real app this would come from transaction calculations
-const mockExpectedAmounts = {
-  salesDrawer: 15000, // Based on cash sales + advances - transfers - deposits
-  pettyCash: 3200     // Previous balance + transfers - expenses
-}
+// Remove duplicate interface since we're importing it
 
 export default function CashCountPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [storeId, setStoreId] = useState<string>("")
+  const [expectedAmounts, setExpectedAmounts] = useState({
+    salesDrawer: 0,
+    pettyCash: 0
+  })
+  
   const [salesCashData, setSalesCashData] = useState<{
     denominations: DenominationCount
     totalAmount: number
@@ -34,6 +33,32 @@ export default function CashCountPage() {
     totalAmount: number
   }>({ denominations: {}, totalAmount: 0 })
 
+  // Load store and expected amounts on component mount
+  useEffect(() => {
+    const loadStoreData = async () => {
+      try {
+        const store = await getDefaultStore()
+        if (store) {
+          setStoreId(store.id)
+          
+          // Calculate expected amounts
+          const salesExpected = await calculateExpectedCashAmount(store.id, 'sales_cash')
+          const pettyExpected = await calculateExpectedCashAmount(store.id, 'petty_cash')
+          
+          setExpectedAmounts({
+            salesDrawer: salesExpected,
+            pettyCash: pettyExpected
+          })
+        }
+      } catch (error) {
+        console.error('Error loading store data:', error)
+        toast.error('Failed to load store information')
+      }
+    }
+
+    loadStoreData()
+  }, [])
+
   const handleSalesCashChange = useCallback((denominations: DenominationCount, totalAmount: number) => {
     setSalesCashData({ denominations, totalAmount })
   }, [])
@@ -43,15 +68,16 @@ export default function CashCountPage() {
   }, [])
 
   const getSalesVariance = () => {
-    return salesCashData.totalAmount - mockExpectedAmounts.salesDrawer
+    return salesCashData.totalAmount - expectedAmounts.salesDrawer
   }
 
   const getPettyVariance = () => {
-    return pettyCashData.totalAmount - mockExpectedAmounts.pettyCash
+    return pettyCashData.totalAmount - expectedAmounts.pettyCash
   }
 
   const validateCounts = () => {
     const errors = []
+    const warnings = []
     
     if (salesCashData.totalAmount === 0) {
       errors.push("Sales cash count is required")
@@ -61,22 +87,36 @@ export default function CashCountPage() {
       errors.push("Petty cash count is required")
     }
 
-    // Check for significant variances
+    // Check for critical variance (₹500+)
+    const totalVariance = Math.abs(getTotalVariance())
+    if (totalVariance >= 500) {
+      errors.push(`CRITICAL VARIANCE: ₹${totalVariance} - Requires immediate attention!`)
+    }
+
+    // Check for significant variances  
     const salesVariance = Math.abs(getSalesVariance())
     const pettyVariance = Math.abs(getPettyVariance())
     
     if (salesVariance > 100) {
-      errors.push(`Sales cash variance is high: ₹${salesVariance}`)
+      warnings.push(`Sales cash variance is high: ₹${salesVariance}`)
     }
     
     if (pettyVariance > 50) {
-      errors.push(`Petty cash variance is high: ₹${pettyVariance}`)
+      warnings.push(`Petty cash variance is high: ₹${pettyVariance}`)
     }
+
+    // Show warnings as toasts but don't block submission
+    warnings.forEach(warning => toast.warning(warning))
     
     return errors
   }
 
   const handleSubmit = async () => {
+    if (!storeId) {
+      toast.error("Store information not loaded")
+      return
+    }
+
     const validationErrors = validateCounts()
     if (validationErrors.length > 0) {
       validationErrors.forEach(error => toast.error(error))
@@ -86,28 +126,31 @@ export default function CashCountPage() {
     setLoading(true)
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      const today = new Date().toISOString().split('T')[0]
+      
+      // Submit sales cash count
+      await submitCashCount({
+        store_id: storeId,
+        count_date: today,
+        count_type: 'sales_drawer',
+        denominations: salesCashData.denominations,
+        total_counted: salesCashData.totalAmount,
+        expected_amount: expectedAmounts.salesDrawer,
+        counted_by: 'temp-user-id', // TODO: Get from auth context
+        notes: `Variance: ${formatCurrency(getSalesVariance())}`
+      })
 
-      const cashCountData = {
-        date: new Date().toISOString().split('T')[0],
-        salesCash: {
-          denominations: salesCashData.denominations,
-          totalCounted: salesCashData.totalAmount,
-          expectedAmount: mockExpectedAmounts.salesDrawer,
-          variance: getSalesVariance()
-        },
-        pettyCash: {
-          denominations: pettyCashData.denominations,
-          totalCounted: pettyCashData.totalAmount,
-          expectedAmount: mockExpectedAmounts.pettyCash,
-          variance: getPettyVariance()
-        },
-        countedBy: "current-user-id", // TODO: Get from auth context
-        countedAt: new Date().toISOString()
-      }
-
-      console.log('Submitting cash count:', cashCountData)
+      // Submit petty cash count
+      await submitCashCount({
+        store_id: storeId,
+        count_date: today,
+        count_type: 'petty_cash',
+        denominations: pettyCashData.denominations,
+        total_counted: pettyCashData.totalAmount,
+        expected_amount: expectedAmounts.pettyCash,
+        counted_by: 'temp-user-id', // TODO: Get from auth context
+        notes: `Variance: ${formatCurrency(getPettyVariance())}`
+      })
       
       toast.success("Cash count submitted successfully!")
       
@@ -116,6 +159,7 @@ export default function CashCountPage() {
       }, 1000)
 
     } catch (error) {
+      console.error('Error submitting cash count:', error)
       toast.error("Failed to submit cash count. Please try again.")
     } finally {
       setLoading(false)
@@ -169,7 +213,7 @@ export default function CashCountPage() {
             <DenominationCounter
               title="Sales Cash Drawer"
               description="Count all cash from sales transactions"
-              expectedAmount={mockExpectedAmounts.salesDrawer}
+              expectedAmount={expectedAmounts.salesDrawer}
               onCountChange={handleSalesCashChange}
             />
 
@@ -177,7 +221,7 @@ export default function CashCountPage() {
             <DenominationCounter
               title="Petty Cash Safe"
               description="Count all cash available for expenses and change"
-              expectedAmount={mockExpectedAmounts.pettyCash}
+              expectedAmount={expectedAmounts.pettyCash}
               onCountChange={handlePettyCashChange}
             />
 
@@ -221,11 +265,11 @@ export default function CashCountPage() {
                       <span className="text-sm font-medium">Total Expected</span>
                     </div>
                     <p className="text-2xl font-bold">
-                      {formatCurrency(mockExpectedAmounts.salesDrawer + mockExpectedAmounts.pettyCash)}
+                      {formatCurrency(expectedAmounts.salesDrawer + expectedAmounts.pettyCash)}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Sales: {formatCurrency(mockExpectedAmounts.salesDrawer)} + 
-                      Petty: {formatCurrency(mockExpectedAmounts.pettyCash)}
+                      Sales: {formatCurrency(expectedAmounts.salesDrawer)} + 
+                      Petty: {formatCurrency(expectedAmounts.pettyCash)}
                     </p>
                   </div>
 

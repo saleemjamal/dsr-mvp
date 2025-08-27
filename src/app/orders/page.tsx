@@ -1,89 +1,24 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
+import { FilterBar, type FilterState } from "@/components/ui/filter-bar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { ShoppingCart, Plus, Search, Calendar, IndianRupee, User, Package, Truck } from "lucide-react"
+import { ShoppingCart, Plus, Search, Calendar, IndianRupee, User, Package, Truck, Loader2, Eye, Edit, CheckCircle } from "lucide-react"
 import Link from "next/link"
+import { format } from "date-fns"
+import { useAuth } from "@/contexts/auth-context"
+import { useStore } from "@/contexts/store-context"
+import { getSalesOrdersForDateRange, type SalesOrderSummary } from "@/lib/sales-orders-service"
+import { canEditTransaction } from "@/lib/reconciliation-service"
+import { toast } from "sonner"
 
-const mockOrders = [
-  {
-    id: "1",
-    order_number: "SO2025001",
-    customer_name: "Rahul Sharma",
-    customer_phone: "+91 9876543001",
-    total_amount: 2500.00,
-    advance_paid: 500.00,
-    balance_due: 2000.00,
-    status: "pending",
-    delivery_date: "2025-01-25",
-    order_date: "2025-01-20",
-    items_count: 3,
-    created_at: "2025-01-20T10:30:00Z"
-  },
-  {
-    id: "2",
-    order_number: "SO2025002",
-    customer_name: "Priya Patel",
-    customer_phone: "+91 9876543002",
-    total_amount: 1800.00,
-    advance_paid: 1800.00,
-    balance_due: 0.00,
-    status: "ready",
-    delivery_date: "2025-01-22",
-    order_date: "2025-01-19",
-    items_count: 2,
-    created_at: "2025-01-19T14:20:00Z"
-  },
-  {
-    id: "3",
-    order_number: "SO2025003",
-    customer_name: "Amit Kumar",
-    customer_phone: "+91 9876543003",
-    total_amount: 3200.00,
-    advance_paid: 1000.00,
-    balance_due: 2200.00,
-    status: "delivered",
-    delivery_date: "2025-01-18",
-    order_date: "2025-01-15",
-    items_count: 5,
-    created_at: "2025-01-15T09:15:00Z"
-  },
-  {
-    id: "4",
-    order_number: "SO2025004",
-    customer_name: "Sneha Singh",
-    customer_phone: "+91 9876543004",
-    total_amount: 4500.00,
-    advance_paid: 2000.00,
-    balance_due: 2500.00,
-    status: "processing",
-    delivery_date: "2025-01-30",
-    order_date: "2025-01-20",
-    items_count: 4,
-    created_at: "2025-01-20T16:45:00Z"
-  },
-  {
-    id: "5",
-    order_number: "SO2025005",
-    customer_name: "Vikram Gupta",
-    customer_phone: "+91 9876543005",
-    total_amount: 1200.00,
-    advance_paid: 0.00,
-    balance_due: 1200.00,
-    status: "cancelled",
-    delivery_date: "2025-01-24",
-    order_date: "2025-01-18",
-    items_count: 1,
-    created_at: "2025-01-18T11:10:00Z"
-  }
-]
 
 const getStatusBadge = (status: string) => {
   const variants = {
@@ -111,14 +46,80 @@ const getStatusBadge = (status: string) => {
 }
 
 export default function OrdersPage() {
-  const [orders] = useState(mockOrders)
+  const { profile } = useAuth()
+  const { accessibleStores } = useStore()
+  const [orders, setOrders] = useState<SalesOrderSummary[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filters, setFilters] = useState<FilterState | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedOrder, setSelectedOrder] = useState(null)
 
+  // Initialize default filters on mount  
+  useEffect(() => {
+    if (!filters) {
+      // Set default to "Today" if no filters set yet
+      const today = new Date()
+      setFilters({
+        dateRange: {
+          from: today,
+          to: today,
+          preset: 'Today'
+        },
+        storeIds: [], // Will be set by FilterBar based on user permissions
+        storeId: null // All stores by default
+      })
+    }
+  }, [filters])
+
+  // Load orders data when filters change
+  useEffect(() => {
+    if (!filters || !profile || !accessibleStores || accessibleStores.length === 0) {
+      return
+    }
+
+    const loadOrdersData = async () => {
+      try {
+        setLoading(true)
+        const fromDate = format(filters.dateRange.from, 'yyyy-MM-dd')
+        const toDate = format(filters.dateRange.to, 'yyyy-MM-dd')
+        
+        // Get user's accessible stores
+        const userStoreIds = accessibleStores.map(store => store.id)
+        
+        // Determine store filter based on selection
+        let storeFilter: string[] | null = null
+        if (filters.storeId === null) {
+          // "All Stores" selected - use user's accessible stores
+          storeFilter = userStoreIds
+        } else {
+          // Specific store selected
+          storeFilter = [filters.storeId]
+        }
+        
+        console.log('Loading orders with filter:', { fromDate, toDate, storeFilter })
+        const ordersData = await getSalesOrdersForDateRange(fromDate, toDate, storeFilter)
+        console.log('Orders loaded:', ordersData)
+        setOrders(ordersData || [])
+      } catch (error) {
+        console.error('Error loading orders:', error)
+        toast.error('Failed to load orders data')
+        setOrders([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadOrdersData()
+  }, [filters, profile, accessibleStores])
+
+  const handleFiltersChange = (newFilters: FilterState) => {
+    setFilters(newFilters)
+  }
+
   const filteredOrders = orders.filter(order => 
-    order.order_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.customer_phone.includes(searchTerm)
+    order.order_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    order.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    order.customer_phone?.includes(searchTerm)
   )
 
   const formatCurrency = (amount: number) => {
@@ -130,11 +131,12 @@ export default function OrdersPage() {
 
   const totalOrders = orders.length
   const pendingOrders = orders.filter(o => o.status === 'pending').length
-  const readyOrders = orders.filter(o => o.status === 'ready').length
+  const confirmedOrders = orders.filter(o => o.status === 'confirmed').length
   const totalValue = orders.reduce((sum, o) => sum + o.total_amount, 0)
+  const totalAdvance = orders.reduce((sum, o) => sum + (o.advance_amount || 0), 0)
   const pendingPayments = orders
     .filter(o => o.status !== 'cancelled' && o.status !== 'delivered')
-    .reduce((sum, o) => sum + o.balance_due, 0)
+    .reduce((sum, o) => sum + (o.balance_amount || 0), 0)
 
   return (
     <div className="flex min-h-screen">
@@ -163,7 +165,15 @@ export default function OrdersPage() {
             </div>
           </div>
 
+          {/* Filter Bar */}
+          <FilterBar 
+            onFiltersChange={handleFiltersChange} 
+            showStoreFilter={true}
+            showDateFilter={true}
+          />
+
           {/* Summary Stats */}
+          {!loading && filters && (
           <div className="grid gap-4 md:grid-cols-5 mb-8">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -173,7 +183,7 @@ export default function OrdersPage() {
               <CardContent>
                 <div className="text-2xl font-bold">{totalOrders}</div>
                 <p className="text-xs text-muted-foreground">
-                  All time orders
+                  {filters.dateRange.preset || 'Custom period'}
                 </p>
               </CardContent>
             </Card>
@@ -193,13 +203,13 @@ export default function OrdersPage() {
             
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Ready for Delivery</CardTitle>
+                <CardTitle className="text-sm font-medium">Confirmed Orders</CardTitle>
                 <Truck className="h-4 w-4 text-green-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-green-600">{readyOrders}</div>
+                <div className="text-2xl font-bold text-green-600">{confirmedOrders}</div>
                 <p className="text-xs text-muted-foreground">
-                  Ready to ship
+                  Ready to fulfill
                 </p>
               </CardContent>
             </Card>
@@ -219,26 +229,30 @@ export default function OrdersPage() {
             
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Pending Payments</CardTitle>
+                <CardTitle className="text-sm font-medium">Balance Due</CardTitle>
                 <IndianRupee className="h-4 w-4 text-red-500" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-red-600">{formatCurrency(pendingPayments)}</div>
                 <p className="text-xs text-muted-foreground">
-                  Due amount
+                  Outstanding amount
                 </p>
               </CardContent>
             </Card>
           </div>
+          )}
 
           {/* Orders Table */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>All Sales Orders ({filteredOrders.length})</CardTitle>
+                  <CardTitle>Sales Orders {!loading && `(${filteredOrders.length})`}</CardTitle>
                   <CardDescription>
-                    Track and manage sales order lifecycle
+                    {filters?.dateRange ? 
+                      `Orders from ${format(filters.dateRange.from, 'MMM dd')} - ${format(filters.dateRange.to, 'MMM dd, yyyy')}` :
+                      'Track and manage sales order lifecycle'
+                    }
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
@@ -255,15 +269,21 @@ export default function OrdersPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                  <span className="ml-2">Loading orders...</span>
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Order Details</TableHead>
                       <TableHead>Customer Info</TableHead>
                       <TableHead>Amount & Payment</TableHead>
-                      <TableHead>Delivery</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>Status & Date</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -278,8 +298,9 @@ export default function OrdersPage() {
                             <div>
                               <p className="font-medium">{order.order_number}</p>
                               <p className="text-sm text-muted-foreground">
-                                {order.items_count} items • {new Date(order.order_date).toLocaleDateString('en-IN')}
+                                {new Date(order.order_date).toLocaleDateString('en-IN')}
                               </p>
+                              <p className="text-sm text-muted-foreground">{order.stores?.store_name}</p>
                             </div>
                           </div>
                         </TableCell>
@@ -293,33 +314,27 @@ export default function OrdersPage() {
                           <div>
                             <p className="font-medium">{formatCurrency(order.total_amount)}</p>
                             <div className="text-sm text-muted-foreground">
-                              <p>Paid: {formatCurrency(order.advance_paid)}</p>
-                              {order.balance_due > 0 && (
-                                <p className="text-red-600">Due: {formatCurrency(order.balance_due)}</p>
+                              <p>Advance: {formatCurrency(order.advance_amount || 0)}</p>
+                              {(order.balance_amount || 0) > 0 && (
+                                <p className="text-red-600">Due: {formatCurrency(order.balance_amount || 0)}</p>
                               )}
                             </div>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <p className="text-sm font-medium">
-                                {new Date(order.delivery_date).toLocaleDateString('en-IN')}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {new Date(order.delivery_date) > new Date() 
-                                  ? `${Math.ceil((new Date(order.delivery_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days left`
-                                  : new Date(order.delivery_date).toDateString() === new Date().toDateString()
-                                  ? 'Today'
-                                  : 'Overdue'
-                                }
-                              </p>
+                          <div>
+                            <div className="mb-2">
+                              {getStatusBadge(order.status)}
+                            </div>
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Calendar className="h-3 w-3" />
+                              {order.status === 'delivered' ? (
+                                <span>Converted {new Date(order.updated_at || order.created_at).toLocaleDateString('en-IN')}</span>
+                              ) : (
+                                <span>Created {new Date(order.created_at).toLocaleDateString('en-IN')}</span>
+                              )}
                             </div>
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          {getStatusBadge(order.status)}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -330,7 +345,7 @@ export default function OrdersPage() {
                                   size="sm"
                                   onClick={() => setSelectedOrder(order)}
                                 >
-                                  View Details
+                                  <Eye className="h-4 w-4" />
                                 </Button>
                               </DialogTrigger>
                               <DialogContent className="max-w-md">
@@ -392,18 +407,22 @@ export default function OrdersPage() {
                               </DialogContent>
                             </Dialog>
                             
-                            {order.status === 'pending' && (
+                            {canEditTransaction(order.status, profile?.role || 'cashier') && (
                               <Link href={`/orders/edit/${order.id}`}>
                                 <Button size="sm" variant="secondary">
+                                  <Edit className="h-4 w-4 mr-1" />
                                   Edit
                                 </Button>
                               </Link>
                             )}
                             
-                            {order.status === 'ready' && (
-                              <Button size="sm">
-                                Mark Delivered
-                              </Button>
+                            {(order.status === 'pending' || order.status === 'confirmed') && (
+                              <Link href={`/orders/convert/${order.id}`}>
+                                <Button size="sm">
+                                  <CheckCircle className="h-4 w-4 mr-1" />
+                                  Convert to Sale
+                                </Button>
+                              </Link>
                             )}
                           </div>
                         </TableCell>
@@ -411,23 +430,25 @@ export default function OrdersPage() {
                     ))}
                   </TableBody>
                 </Table>
-              </div>
-              
-              {filteredOrders.length === 0 && (
-                <div className="text-center py-8">
-                  <ShoppingCart className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">
-                    {searchTerm ? "No orders match your search" : "No orders found"}
-                  </p>
-                  {!searchTerm && (
-                    <Link href="/orders/new">
-                      <Button className="mt-2">
-                        <Plus className="mr-2 h-4 w-4" />
-                        Create First Order
-                      </Button>
-                    </Link>
+                  </div>
+                  
+                  {filteredOrders.length === 0 && !loading && (
+                    <div className="text-center py-8">
+                      <ShoppingCart className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                      <p className="text-muted-foreground">
+                        {searchTerm ? "No orders match your search" : "No orders found for the selected period"}
+                      </p>
+                      {!searchTerm && (
+                        <Link href="/orders/new">
+                          <Button className="mt-2">
+                            <Plus className="mr-2 h-4 w-4" />
+                            Create First Order
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
                   )}
-                </div>
+                </>
               )}
             </CardContent>
           </Card>

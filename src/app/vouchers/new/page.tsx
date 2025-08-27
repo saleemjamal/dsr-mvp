@@ -9,17 +9,23 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CustomerLookup } from "@/components/ui/customer-lookup"
 import { TenderTypeSelect } from "@/components/ui/tender-type-select"
 import { ArrowLeft, Gift, Calendar, IndianRupee, CreditCard, Receipt } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
+import { createGiftVoucher } from "@/lib/gift-vouchers-service"
+import { createCustomer } from "@/lib/customer-service"
+import { useStore } from "@/contexts/store-context"
 
 export default function NewVoucherPage() {
   const router = useRouter()
+  const { currentStore, accessibleStores, canAccessMultipleStores } = useStore()
   const [loading, setLoading] = useState(false)
   const [customer, setCustomer] = useState(null)
   const [formData, setFormData] = useState({
+    store_id: currentStore?.id || accessibleStores[0]?.id || '',
     voucher_number: '',
     amount: '',
     expiry_date: '',
@@ -33,6 +39,10 @@ export default function NewVoucherPage() {
 
   const validateForm = () => {
     const errors = []
+    
+    if (!formData.store_id) {
+      errors.push("Store selection is required")
+    }
     
     if (!formData.voucher_number.trim()) {
       errors.push("Voucher number is required")
@@ -77,26 +87,33 @@ export default function NewVoucherPage() {
     setLoading(true)
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      // Create customer if needed
+      let customerId = customer.id
       
+      if (!customerId && customer.name && customer.phone) {
+        const newCustomer = await createCustomer({
+          customer_name: customer.name,
+          phone: customer.phone,
+          email: customer.email || undefined
+        })
+        customerId = newCustomer.id
+      }
+
       const voucherData = {
-        id: String(Date.now()),
+        store_id: formData.store_id, // Originating store - voucher can be redeemed anywhere
         voucher_number: formData.voucher_number.toUpperCase(),
         amount: parseFloat(formData.amount),
         balance: parseFloat(formData.amount),
-        status: 'active',
-        customer_id: customer.id,
+        status: 'active' as const,
         customer_name: customer.name,
         customer_phone: customer.phone,
-        customer_email: customer.email || null,
         issued_date: new Date().toISOString().split('T')[0],
         expiry_date: formData.expiry_date,
         tender_type: formData.tender_type,
-        notes: formData.notes || null,
-        created_at: new Date().toISOString()
+        notes: formData.notes || undefined
       }
 
-      console.log('Creating voucher:', voucherData)
+      await createGiftVoucher(voucherData)
       
       toast.success(`Gift voucher ${formData.voucher_number.toUpperCase()} created successfully!`)
       
@@ -105,6 +122,7 @@ export default function NewVoucherPage() {
       }, 1000)
       
     } catch (error) {
+      console.error('Error creating gift voucher:', error)
       toast.error("Failed to create voucher. Please try again.")
     } finally {
       setLoading(false)
@@ -185,6 +203,44 @@ export default function NewVoucherPage() {
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-6">
+                  {/* Store Selection - Only show dropdown for multi-store users */}
+                  {canAccessMultipleStores ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="store">Issuing Store *</Label>
+                      <Select 
+                        value={formData.store_id} 
+                        onValueChange={(value) => handleInputChange('store_id', value)}
+                      >
+                        <SelectTrigger id="store" className="h-12">
+                          <SelectValue placeholder="Select store" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {accessibleStores.map((store) => (
+                            <SelectItem key={store.id} value={store.id}>
+                              {store.store_name} ({store.store_code})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Store that issued this voucher (can be redeemed at any store)
+                      </p>
+                    </div>
+                  ) : (
+                    /* Single store users - Show current store as read-only */
+                    <div className="space-y-2">
+                      <Label htmlFor="store">Issuing Store</Label>
+                      <div className="h-12 px-3 py-2 border border-input bg-muted rounded-md flex items-center">
+                        <span className="text-sm">
+                          {currentStore ? `${currentStore.store_name} (${currentStore.store_code})` : 'Loading...'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Store that issued this voucher (can be redeemed at any store)
+                      </p>
+                    </div>
+                  )}
+                  
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <Label htmlFor="voucher_number">Voucher Number *</Label>

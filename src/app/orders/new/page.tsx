@@ -9,20 +9,26 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CustomerLookup } from "@/components/ui/customer-lookup"
 import { TenderTypeSelect } from "@/components/ui/tender-type-select"
-import { ArrowLeft, ShoppingCart, Calendar, IndianRupee, Package, Receipt, Plus, Trash2 } from "lucide-react"
+import { ArrowLeft, ShoppingCart, Calendar, IndianRupee, Package, Receipt } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
+import { createSalesOrder, generateOrderNumber } from "@/lib/sales-orders-service"
+import { createCustomer } from "@/lib/customer-service"
+import { useStore } from "@/contexts/store-context"
 
 export default function NewOrderPage() {
   const router = useRouter()
+  const { currentStore, accessibleStores, canAccessMultipleStores } = useStore()
   const [loading, setLoading] = useState(false)
-  const [customer, setCustomer] = useState(null)
+  const [customer, setCustomer] = useState<any>(null)
   const [formData, setFormData] = useState({
+    store_id: currentStore?.id || accessibleStores[0]?.id || '',
     order_number: '',
     delivery_date: '',
-    order_amount: '',
+    total_amount: '',
     advance_amount: '',
     tender_type: '',
     notes: ''
@@ -35,35 +41,31 @@ export default function NewOrderPage() {
 
 
 
+
   const validateForm = () => {
     const errors = []
+    
+    if (!formData.store_id) {
+      errors.push("Store selection is required")
+    }
     
     if (!formData.order_number.trim()) {
       errors.push("Order number is required")
     }
     
-    if (!customer) {
+    console.log('Validating customer:', customer)
+    if (!customer || !customer.id) {
+      console.log('Customer validation failed - customer:', customer)
       errors.push("Customer information is required")
     }
     
-    if (!formData.delivery_date) {
-      errors.push("Delivery date is required")
-    } else {
-      const deliveryDate = new Date(formData.delivery_date)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      if (deliveryDate < today) {
-        errors.push("Delivery date cannot be in the past")
-      }
-    }
-    
-    const orderAmount = parseFloat(formData.order_amount || '0')
-    if (!formData.order_amount || isNaN(orderAmount) || orderAmount <= 0) {
-      errors.push("Valid order amount is required")
+    const totalAmount = parseFloat(formData.total_amount || '0')
+    if (totalAmount <= 0) {
+      errors.push("Total amount must be greater than zero")
     }
     
     const advanceAmount = parseFloat(formData.advance_amount || '0')
-    if (advanceAmount > orderAmount) {
+    if (advanceAmount > totalAmount) {
       errors.push("Advance amount cannot exceed total order amount")
     }
     
@@ -86,30 +88,35 @@ export default function NewOrderPage() {
     setLoading(true)
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      let customerId = customer.id
       
-      const orderAmount = parseFloat(formData.order_amount)
+      if (!customerId && customer.name && customer.phone) {
+        const newCustomer = await createCustomer({
+          customer_name: customer.name,
+          phone: customer.phone,
+          email: customer.email || undefined
+        })
+        customerId = newCustomer.id
+      }
+
+      const totalAmount = parseFloat(formData.total_amount || '0')
       const advanceAmount = parseFloat(formData.advance_amount || '0')
       
       const orderData = {
-        id: String(Date.now()),
+        store_id: formData.store_id,
         order_number: formData.order_number.toUpperCase(),
-        customer_id: customer.id,
+        customer_id: customerId,
         customer_name: customer.name,
         customer_phone: customer.phone,
-        customer_email: customer.email || null,
-        total_amount: orderAmount,
-        advance_paid: advanceAmount,
-        balance_due: orderAmount - advanceAmount,
-        status: 'pending',
-        delivery_date: formData.delivery_date,
-        order_date: new Date().toISOString().split('T')[0],
-        tender_type: advanceAmount > 0 ? formData.tender_type : null,
-        notes: formData.notes || null,
-        created_at: new Date().toISOString()
+        items_description: 'Sales order items', // Simple placeholder since items aren't detailed yet
+        total_amount: totalAmount,
+        advance_amount: advanceAmount,
+        ...(advanceAmount > 0 && formData.tender_type && { tender_type: formData.tender_type }),
+        status: 'pending' as const,
+        notes: formData.notes || undefined
       }
 
-      console.log('Creating order:', orderData)
+      await createSalesOrder(orderData)
       
       toast.success(`Sales order ${formData.order_number.toUpperCase()} created successfully!`)
       
@@ -118,6 +125,7 @@ export default function NewOrderPage() {
       }, 1000)
       
     } catch (error) {
+      console.error('Error creating sales order:', error)
       toast.error("Failed to create order. Please try again.")
     } finally {
       setLoading(false)
@@ -145,7 +153,7 @@ export default function NewOrderPage() {
     handleInputChange('delivery_date', formattedDate)
   }
 
-  const totalAmount = calculateTotal()
+  const totalAmount = parseFloat(formData.total_amount || '0')
   const advanceAmount = parseFloat(formData.advance_amount || '0')
   const balanceAmount = totalAmount - advanceAmount
 
@@ -186,12 +194,44 @@ export default function NewOrderPage() {
                     <div>
                       <CardTitle>Order Information</CardTitle>
                       <CardDescription>
-                        Basic order details and customer information
+                        Order number, amount, and customer information
                       </CardDescription>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                  {/* Store Selection - Only show dropdown for multi-store users */}
+                  {canAccessMultipleStores ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="store">Store *</Label>
+                      <Select 
+                        value={formData.store_id} 
+                        onValueChange={(value) => handleInputChange('store_id', value)}
+                      >
+                        <SelectTrigger id="store" className="h-12">
+                          <SelectValue placeholder="Select store" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {accessibleStores.map((store) => (
+                            <SelectItem key={store.id} value={store.id}>
+                              {store.store_name} ({store.store_code})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : (
+                    /* Single store users - Show current store as read-only */
+                    <div className="space-y-2">
+                      <Label htmlFor="store">Store</Label>
+                      <div className="h-12 px-3 py-2 border border-input bg-muted rounded-md flex items-center">
+                        <span className="text-sm">
+                          {currentStore ? `${currentStore.store_name} (${currentStore.store_code})` : 'Loading...'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <Label htmlFor="order_number">Order Number *</Label>
@@ -215,30 +255,23 @@ export default function NewOrderPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="delivery_date">Delivery Date *</Label>
-                      <div className="flex gap-2">
-                        <div className="relative flex-1">
-                          <Calendar className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            id="delivery_date"
-                            type="date"
-                            value={formData.delivery_date}
-                            onChange={(e) => handleInputChange('delivery_date', e.target.value)}
-                            className="pl-10"
-                            required
-                          />
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={setDefaultDelivery}
-                        >
-                          1W
-                        </Button>
+                      <Label htmlFor="total_amount">Total Amount (₹) *</Label>
+                      <div className="relative">
+                        <IndianRupee className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="total_amount"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="0.00"
+                          value={formData.total_amount}
+                          onChange={(e) => handleInputChange('total_amount', e.target.value)}
+                          className="pl-10"
+                          required
+                        />
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Expected delivery date (click 1W for 1 week from today)
+                        Total order value
                       </p>
                     </div>
                   </div>
@@ -247,87 +280,6 @@ export default function NewOrderPage() {
                     onCustomerSelect={setCustomer}
                     allowNewCustomer={true}
                   />
-                </CardContent>
-              </Card>
-
-              {/* Order Details */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-orange-100 dark:bg-orange-900 rounded-lg">
-                      <Package className="h-5 w-5 text-orange-600 dark:text-orange-300" />
-                    </div>
-                    <div>
-                      <CardTitle>Order Details</CardTitle>
-                      <CardDescription>
-                        Enter order amount and delivery information
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {items.map((item, index) => (
-                      <div key={item.id} className="grid grid-cols-12 gap-4 items-end p-4 border rounded-lg">
-                        <div className="col-span-5">
-                          <Label htmlFor={`description_${item.id}`}>Item Description *</Label>
-                          <Input
-                            id={`description_${item.id}`}
-                            placeholder="Describe the item"
-                            value={item.description}
-                            onChange={(e) => handleItemChange(item.id, 'description', e.target.value)}
-                            required
-                          />
-                        </div>
-                        
-                        <div className="col-span-2">
-                          <Label htmlFor={`quantity_${item.id}`}>Quantity *</Label>
-                          <Input
-                            id={`quantity_${item.id}`}
-                            type="number"
-                            min="1"
-                            value={item.quantity}
-                            onChange={(e) => handleItemChange(item.id, 'quantity', parseInt(e.target.value) || 1)}
-                            required
-                          />
-                        </div>
-                        
-                        <div className="col-span-2">
-                          <Label htmlFor={`rate_${item.id}`}>Rate (₹) *</Label>
-                          <Input
-                            id={`rate_${item.id}`}
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder="0.00"
-                            value={item.rate}
-                            onChange={(e) => handleItemChange(item.id, 'rate', parseFloat(e.target.value) || 0)}
-                            required
-                          />
-                        </div>
-                        
-                        <div className="col-span-2">
-                          <Label>Amount</Label>
-                          <div className="p-2 bg-muted rounded text-right font-medium">
-                            {formatCurrency(item.amount)}
-                          </div>
-                        </div>
-                        
-                        <div className="col-span-1">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeItem(item.id)}
-                            disabled={items.length === 1}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
                 </CardContent>
               </Card>
 
@@ -357,13 +309,18 @@ export default function NewOrderPage() {
                           type="number"
                           step="0.01"
                           min="0"
-                          max={totalAmount}
+                          max={totalAmount || undefined}
                           placeholder="0.00"
                           value={formData.advance_amount}
                           onChange={(e) => handleInputChange('advance_amount', e.target.value)}
-                          className="pl-10"
+                          className={`pl-10 ${advanceAmount > totalAmount && totalAmount > 0 ? 'border-red-500 focus:border-red-500' : ''}`}
                         />
                       </div>
+                      {advanceAmount > totalAmount && totalAmount > 0 && (
+                        <p className="text-xs text-red-600">
+                          Advance amount cannot exceed total amount ({formatCurrency(totalAmount)})
+                        </p>
+                      )}
                       <p className="text-xs text-muted-foreground">
                         Amount paid in advance (optional)
                       </p>
@@ -418,9 +375,9 @@ export default function NewOrderPage() {
                 <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">Order Information</h4>
                 <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
                   <li>• Order will be created in "Pending" status</li>
-                  <li>• Customer will be notified of delivery date</li>
                   <li>• Balance payment can be collected on delivery</li>
                   <li>• Order status can be updated from the orders list</li>
+                  <li>• Item details will be managed when item master is implemented</li>
                 </ul>
               </div>
 
@@ -430,7 +387,7 @@ export default function NewOrderPage() {
                     Cancel
                   </Button>
                 </Link>
-                <Button type="submit" disabled={loading || totalAmount === 0}>
+                <Button type="submit" disabled={loading || totalAmount <= 0}>
                   {loading ? (
                     <>
                       <Package className="mr-2 h-4 w-4 animate-spin" />
