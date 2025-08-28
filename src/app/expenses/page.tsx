@@ -23,14 +23,15 @@ import { canEditTransaction } from "@/lib/reconciliation-service"
 import { toast } from "sonner"
 
 interface ExpenseWithStore {
-  id: string
+  id?: string
   store_id: string
   expense_date: string
   category: string
   amount: number
   description: string
-  voucher_image_url: string | null
-  created_at: string
+  voucher_image_url?: string
+  created_at?: string
+  status?: string
   stores: {
     store_name: string
     store_code: string
@@ -59,8 +60,16 @@ export default function ExpensesPage() {
   const { profile } = useAuth()
   const { accessibleStores, isAllStoresSelected } = useStore()
   const [expenses, setExpenses] = useState<ExpenseWithStore[]>([])
-  const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState<FilterState | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [filters, setFilters] = useState<FilterState>({
+    dateRange: {
+      from: new Date(),
+      to: new Date(),
+      preset: 'Today'
+    },
+    storeIds: [],
+    storeId: null
+  })
   
   // Edit expense state
   const [editingExpense, setEditingExpense] = useState<ExpenseWithStore | null>(null)
@@ -72,26 +81,11 @@ export default function ExpensesPage() {
     description: ''
   })
 
-  // Initialize default filters on mount  
-  useEffect(() => {
-    if (!filters) {
-      // Set default to "Today" if no filters set yet
-      const today = new Date()
-      setFilters({
-        dateRange: {
-          from: today,
-          to: today,
-          preset: 'Today'
-        },
-        storeIds: [], // Will be set by FilterBar based on user permissions
-        storeId: null // All stores by default
-      })
-    }
-  }, [filters])
+  // Remove manual filter initialization - now handled by FilterBar
 
   // Load expenses data when filters change
   useEffect(() => {
-    if (!filters || !profile || !accessibleStores || accessibleStores.length === 0) return
+    if (!profile || !accessibleStores || accessibleStores.length === 0) return
 
     const loadExpensesData = async () => {
       try {
@@ -169,6 +163,10 @@ export default function ExpensesPage() {
         return
       }
 
+      if (!editingExpense?.id) {
+        throw new Error('Invalid expense ID')
+      }
+      
       await updateExpense(editingExpense.id, {
         amount,
         category: editFormData.category,
@@ -177,7 +175,7 @@ export default function ExpensesPage() {
 
       // Update local state
       setExpenses(prev => prev.map(expense => 
-        expense.id === editingExpense.id 
+        expense.id === editingExpense?.id 
           ? { 
               ...expense, 
               amount, 
@@ -338,7 +336,7 @@ export default function ExpensesPage() {
                       </TableHeader>
                       <TableBody>
                         {expenses.map((expense) => (
-                          <TableRow key={expense.id}>
+                          <TableRow key={expense.id || 'expense-' + Math.random()}>
                             <TableCell>
                               {expense.voucher_image_url ? (
                                 <Dialog>
@@ -404,10 +402,10 @@ export default function ExpensesPage() {
                               {expense.description || '-'}
                             </TableCell>
                             <TableCell>
-                              {new Date(expense.created_at).toLocaleTimeString('en-IN', {
+                              {expense.created_at ? new Date(expense.created_at).toLocaleTimeString('en-IN', {
                                 hour: '2-digit',
                                 minute: '2-digit'
-                              })}
+                              }) : '-'}
                             </TableCell>
                             <TableCell>
                               {canEditTransaction(expense.status || 'pending', profile?.role || 'cashier') && (
@@ -452,7 +450,7 @@ export default function ExpensesPage() {
             ) : (
               <div className="space-y-4">
                 {expenses.map((expense) => (
-                  <Card key={expense.id}>
+                  <Card key={expense.id || 'expense-' + Math.random()}>
                     <CardContent className="pt-6">
                       <div className="flex justify-between items-start mb-2">
                         <div>
@@ -475,10 +473,10 @@ export default function ExpensesPage() {
                           -{formatCurrency(expense.amount)}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {new Date(expense.created_at).toLocaleTimeString('en-IN', {
+                          {expense.created_at ? new Date(expense.created_at).toLocaleTimeString('en-IN', {
                             hour: '2-digit',
                             minute: '2-digit'
-                          })}
+                          }) : '-'}
                         </span>
                       </div>
                       {expense.description && (

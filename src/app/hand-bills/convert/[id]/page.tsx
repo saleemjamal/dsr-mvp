@@ -103,6 +103,10 @@ export default function ConvertHandBillPage() {
     setLoading(true)
 
     try {
+      if (!handBill.id) {
+        throw new Error('Invalid hand bill ID')
+      }
+      
       console.log('Starting conversion - Hand bill ID:', handBill.id, 'Sale ID:', saleId.toUpperCase())
       
       // Call the actual conversion service

@@ -14,7 +14,26 @@ import { ArrowLeft, Search, RotateCcw, User, Calendar, IndianRupee, Receipt, Ale
 import { toast } from "sonner"
 import Link from "next/link"
 
-const mockRRNs = [
+// TODO: This page should be refactored to use the real returns service instead of mock data
+// Similar to how other modules connect to their respective services
+interface MockRRN {
+  id: string
+  rrn_number: string
+  rrn_amount: number
+  balance: number
+  status: string
+  customer_name: string
+  customer_phone: string
+  customer_email: string
+  rrn_date: string
+  expiry_date: string
+  sales_bill_number: string
+  return_reason: string
+  tender_type: string
+  created_at: string
+}
+
+const mockRRNs: MockRRN[] = [
   {
     id: "1",
     rrn_number: "RRN2025001",
@@ -69,7 +88,7 @@ export default function RedeemRRNForSalePage() {
   const router = useRouter()
   const [rrnNumber, setRrnNumber] = useState("")
   const [saleAmount, setSaleAmount] = useState("")
-  const [rrn, setRrn] = useState(null)
+  const [rrn, setRrn] = useState<MockRRN | null>(null)
   const [loading, setLoading] = useState(false)
   const [redeeming, setRedeeming] = useState(false)
 

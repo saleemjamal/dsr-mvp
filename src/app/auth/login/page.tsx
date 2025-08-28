@@ -1,60 +1,16 @@
 "use client"
 
-import { useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/contexts/auth-context'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Separator } from '@/components/ui/separator'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { LogIn, Mail, Lock, Building2, AlertCircle } from 'lucide-react'
+import { Building2 } from 'lucide-react'
 import { toast } from 'sonner'
-import Link from 'next/link'
 
-export default function LoginPage() {
-  const router = useRouter()
+function LoginContent() {
   const searchParams = useSearchParams()
-  const { signIn, signInWithGoogle, loading } = useAuth()
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  })
-  const [error, setError] = useState('')
-
-  const redirectTo = searchParams?.get('redirect') || '/'
-
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
-    if (error) setError('')
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-
-    if (!formData.email || !formData.password) {
-      setError('Please fill in all fields')
-      return
-    }
-
-    try {
-      const { error } = await signIn(formData.email, formData.password)
-      
-      if (error) {
-        setError(error.message)
-        toast.error('Login failed: ' + error.message)
-      } else {
-        toast.success('Logged in successfully!')
-        router.push(redirectTo)
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'An error occurred during login'
-      setError(message)
-      toast.error(message)
-    }
-  }
+  const { signInWithGoogle, loading } = useAuth()
 
   const handleGoogleSignIn = async () => {
     try {
@@ -63,33 +19,9 @@ export default function LoginPage() {
       if (error) {
         toast.error('Google sign-in failed: ' + error.message)
       }
-      // Don't redirect here - the OAuth flow will handle it
+      // OAuth flow will handle redirect automatically
     } catch (err) {
       toast.error('Google sign-in failed')
-    }
-  }
-
-  const handleDemoLogin = async (role: 'admin' | 'manager' | 'staff') => {
-    const demoCredentials = {
-      admin: { email: 'admin@dsr.com', password: 'admin123' },
-      manager: { email: 'manager@dsr.com', password: 'manager123' },
-      staff: { email: 'staff@dsr.com', password: 'staff123' }
-    }
-
-    const { email, password } = demoCredentials[role]
-    setFormData({ email, password })
-    
-    try {
-      const { error } = await signIn(email, password)
-      
-      if (error) {
-        toast.error(`Demo login failed: ${error.message}`)
-      } else {
-        toast.success(`Logged in as ${role}!`)
-        router.push(redirectTo)
-      }
-    } catch (err) {
-      toast.error('Demo login failed')
     }
   }
 
@@ -110,31 +42,21 @@ export default function LoginPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <LogIn className="h-5 w-5" />
-              Sign In
+            <CardTitle className="text-center">
+              Sign In to DSR
             </CardTitle>
-            <CardDescription>
-              Enter your credentials to access the system
+            <CardDescription className="text-center">
+              Use your authorized Google account to access the system
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            {error && (
-              <Alert variant="destructive" className="mb-4">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            {/* Google Sign In Button */}
+          <CardContent className="space-y-6">
             <Button
               type="button"
-              variant="outline"
-              className="w-full"
+              className="w-full h-12"
               onClick={handleGoogleSignIn}
               disabled={loading}
             >
-              <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
+              <svg className="mr-3 h-5 w-5" viewBox="0 0 24 24">
                 <path
                   fill="currentColor"
                   d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -154,109 +76,10 @@ export default function LoginPage() {
               </svg>
               {loading ? 'Signing in...' : 'Continue with Google'}
             </Button>
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <Separator />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">
-                  Or continue with email
-                </span>
-              </div>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={formData.email}
-                    onChange={(e) => handleInputChange('email', e.target.value)}
-                    className="pl-10"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="Enter your password"
-                    value={formData.password}
-                    onChange={(e) => handleInputChange('password', e.target.value)}
-                    className="pl-10"
-                    required
-                  />
-                </div>
-              </div>
-
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? (
-                  <>
-                    <LogIn className="mr-2 h-4 w-4 animate-spin" />
-                    Signing in...
-                  </>
-                ) : (
-                  <>
-                    <LogIn className="mr-2 h-4 w-4" />
-                    Sign In
-                  </>
-                )}
-              </Button>
-            </form>
-
-            <div className="mt-6">
-              <Separator />
-              <p className="text-center text-sm text-muted-foreground mt-4 mb-3">
-                Demo Accounts (for testing)
-              </p>
-              <div className="grid grid-cols-1 gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleDemoLogin('admin')}
-                  disabled={loading}
-                  className="text-xs"
-                >
-                  Admin Demo (admin@dsr.com)
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleDemoLogin('manager')}
-                  disabled={loading}
-                  className="text-xs"
-                >
-                  Manager Demo (manager@dsr.com)
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleDemoLogin('staff')}
-                  disabled={loading}
-                  className="text-xs"
-                >
-                  Staff Demo (staff@dsr.com)
-                </Button>
-              </div>
-            </div>
-
-            <div className="mt-6 text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Don&apos;t have an account?{' '}
-                <Link href="/auth/signup" className="font-medium text-primary hover:text-primary/80">
-                  Sign up
-                </Link>
-              </p>
+            
+            <div className="text-center text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
+              <p className="font-medium">Access is restricted to authorized users only.</p>
+              <p className="text-xs mt-1">Contact your administrator if you need access.</p>
             </div>
           </CardContent>
         </Card>
@@ -268,5 +91,24 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <Card className="mx-auto max-w-sm">
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+              <p className="mt-2 text-muted-foreground">Loading...</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   )
 }

@@ -36,6 +36,7 @@ export interface FilterBarProps {
 
 export interface FilterState {
   storeId: string | null // null means "All Stores" for multi-store users
+  storeIds?: string[] // Array of store IDs when "All Stores" is selected
   storeName?: string
   dateRange: {
     from: Date
@@ -102,6 +103,7 @@ export function FilterBar({
   
   const [filters, setFilters] = useState<FilterState>({
     storeId: currentStore?.id || null,
+    storeIds: currentStore?.id ? [currentStore.id] : [],
     storeName: currentStore?.store_name,
     dateRange: {
       from: new Date(),
@@ -123,6 +125,7 @@ export function FilterBar({
       setFilters(prev => ({
         ...prev,
         storeId: currentStore.id,
+        storeIds: [currentStore.id],
         storeName: currentStore.store_name
       }))
     }
@@ -138,6 +141,7 @@ export function FilterBar({
       setFilters(prev => ({
         ...prev,
         storeId: null,
+        storeIds: accessibleStores.map(store => store.id),
         storeName: "All Stores"
       }))
     } else {
@@ -145,6 +149,7 @@ export function FilterBar({
       setFilters(prev => ({
         ...prev,
         storeId: storeId,
+        storeIds: [storeId],
         storeName: store?.store_name || ""
       }))
     }
@@ -193,6 +198,7 @@ export function FilterBar({
   const clearFilters = () => {
     setFilters({
       storeId: shouldShowStoreFilter ? null : currentStore?.id || null,
+      storeIds: shouldShowStoreFilter ? accessibleStores.map(store => store.id) : (currentStore?.id ? [currentStore.id] : []),
       storeName: shouldShowStoreFilter ? "All Stores" : currentStore?.store_name,
       dateRange: {
         from: new Date(),

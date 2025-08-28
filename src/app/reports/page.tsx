@@ -5,10 +5,11 @@ import { Header } from "@/components/layout/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { BarChart3, FileText, TrendingUp, Calculator, Building, Zap, Download, Eye } from "lucide-react"
+import { BarChart3, FileText, TrendingUp, Calculator, Building, Zap, Download, Eye, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { PermissionGuard } from "@/components/auth/PermissionGuard"
 import { Permission } from "@/lib/permissions"
+import { useAuth } from "@/contexts/auth-context"
 
 const reportCategories = [
   {
@@ -126,8 +127,89 @@ const reportCategories = [
 ]
 
 export default function ReportsPage() {
+  const { loading, profile, user } = useAuth()
+
+  // Debug logging
+  console.log('Reports Page - Auth State:', { 
+    loading, 
+    hasProfile: !!profile, 
+    hasUser: !!user,
+    userRole: profile?.role,
+    profileData: profile 
+  })
+
+  if (loading) {
+    console.log('Reports Page - Showing loading state')
+    return (
+      <div className="flex min-h-screen">
+        <aside className="hidden lg:block w-64 border-r">
+          <Sidebar />
+        </aside>
+        
+        <div className="flex-1">
+          <Header />
+          
+          <main className="p-6">
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span className="ml-2">Loading reports...</span>
+            </div>
+          </main>
+        </div>
+      </div>
+    )
+  }
+
+  if (!profile) {
+    console.log('Reports Page - No profile, showing no access message')
+    return (
+      <div className="flex min-h-screen">
+        <aside className="hidden lg:block w-64 border-r">
+          <Sidebar />
+        </aside>
+        
+        <div className="flex-1">
+          <Header />
+          
+          <main className="p-6">
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
+                <p className="text-muted-foreground">Unable to load user profile</p>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    )
+  }
+
+  console.log('Reports Page - Rendering with PermissionGuard')
   return (
-    <PermissionGuard permission={Permission.VIEW_REPORTS}>
+    <PermissionGuard 
+      permission={Permission.VIEW_REPORTS}
+      fallback={
+        <div className="flex min-h-screen">
+          <aside className="hidden lg:block w-64 border-r">
+            <Sidebar />
+          </aside>
+          
+          <div className="flex-1">
+            <Header />
+            
+            <main className="p-6">
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
+                  <p className="text-muted-foreground">You don't have permission to view reports</p>
+                  <p className="text-sm text-muted-foreground mt-2">Your role: {profile?.role}</p>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>
+      }
+    >
       <div className="flex min-h-screen">
         <aside className="hidden lg:block w-64 border-r">
           <Sidebar />

@@ -15,7 +15,7 @@ export interface Return {
 }
 
 export interface ReturnSummary {
-  id: string
+  id?: string
   return_date: string
   original_bill_reference: string
   return_amount: number
@@ -23,7 +23,11 @@ export interface ReturnSummary {
   customer_name: string
   reason?: string
   status?: string
-  created_at: string
+  created_at?: string
+  stores?: {
+    store_name: string
+    store_code: string
+  }
 }
 
 // ==========================================

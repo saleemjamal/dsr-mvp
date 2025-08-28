@@ -133,7 +133,7 @@ export default function ReconciliationPage() {
       const reconciliationData: ReconciliationData = {
         reconciled_by: profile.id,
         reconciled_at: new Date().toISOString(),
-        reconciliation_source: 'manual',
+        reconciliation_source: undefined,
         reconciliation_notes: `Quick reconciliation by ${profile.full_name || profile.email}`,
         status: 'reconciled'
       }
@@ -192,7 +192,7 @@ export default function ReconciliationPage() {
       const reconciliationData: ReconciliationData = {
         reconciled_by: profile.id,
         reconciled_at: new Date().toISOString(),
-        reconciliation_source: 'batch',
+        reconciliation_source: undefined,
         reconciliation_notes: `Batch reconciliation on ${format(new Date(), 'yyyy-MM-dd HH:mm')}`,
         status: 'reconciled'
       }

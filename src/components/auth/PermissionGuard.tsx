@@ -45,7 +45,17 @@ export function PermissionGuard({
 }: PermissionGuardProps) {
   const { profile } = useAuth()
   
+  // Debug logging
+  console.log('PermissionGuard - Check:', {
+    hasProfile: !!profile,
+    userRole: profile?.role,
+    requiredPermission: permission,
+    requiredPermissions: permissions,
+    context
+  })
+  
   if (!profile) {
+    console.log('PermissionGuard - No profile, returning fallback')
     return <>{fallback}</>
   }
 
@@ -55,17 +65,30 @@ export function PermissionGuard({
 
   if (permission) {
     hasAccess = hasPermission(userRole, permission, context)
+    console.log('PermissionGuard - Single permission check:', {
+      userRole,
+      permission,
+      hasAccess
+    })
   } else if (permissions) {
     if (requireAll) {
       hasAccess = permissions.every(p => hasPermission(userRole, p, context))
     } else {
       hasAccess = hasAnyPermission(userRole, permissions, context)
     }
+    console.log('PermissionGuard - Multiple permissions check:', {
+      userRole,
+      permissions,
+      requireAll,
+      hasAccess
+    })
   } else {
     // No permissions specified, default to showing content
     hasAccess = true
+    console.log('PermissionGuard - No permissions specified, granting access')
   }
 
+  console.log('PermissionGuard - Final result:', { hasAccess, willShowContent: hasAccess })
   return hasAccess ? <>{children}</> : <>{fallback}</>
 }
 

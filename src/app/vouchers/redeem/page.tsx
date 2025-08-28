@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
@@ -15,7 +15,7 @@ import { toast } from "sonner"
 import Link from "next/link"
 import { getVoucherByNumber, redeemVoucher, type GiftVoucher } from "@/lib/gift-vouchers-service"
 
-export default function RedeemVoucherPage() {
+function RedeemVoucherContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [voucherNumber, setVoucherNumber] = useState("")
@@ -230,7 +230,7 @@ export default function RedeemVoucherPage() {
                         </CardDescription>
                       </div>
                     </div>
-                    {getStatusBadge(voucher.status, voucher.expiry_date)}
+                    {getStatusBadge(voucher.status || 'active', voucher.expiry_date)}
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -406,5 +406,30 @@ export default function RedeemVoucherPage() {
         </main>
       </div>
     </div>
+  )
+}
+
+export default function RedeemVoucherPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen">
+        <aside className="hidden lg:block w-64 border-r">
+          <Sidebar />
+        </aside>
+        <div className="flex-1">
+          <Header />
+          <main className="p-6">
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                <p className="mt-2 text-muted-foreground">Loading...</p>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    }>
+      <RedeemVoucherContent />
+    </Suspense>
   )
 }

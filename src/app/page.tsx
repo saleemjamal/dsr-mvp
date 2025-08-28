@@ -19,8 +19,16 @@ export default function Dashboard() {
   const { user, profile, loading } = useAuth()
   const { accessibleStores } = useStore()
   const router = useRouter()
-  const [dashboardLoading, setDashboardLoading] = useState(true)
-  const [filters, setFilters] = useState<FilterState | null>(null)
+  const [dashboardLoading, setDashboardLoading] = useState(false)
+  const [filters, setFilters] = useState<FilterState>({
+    dateRange: {
+      from: new Date(),
+      to: new Date(),
+      preset: 'Today'
+    },
+    storeIds: [],
+    storeId: null
+  })
   const [dashboardData, setDashboardData] = useState<DashboardData>({
     totalSales: 0,
     totalExpenses: 0,
@@ -50,12 +58,13 @@ export default function Dashboard() {
 
   // Load dashboard data when filters change
   useEffect(() => {
-    if (!filters || !profile || !accessibleStores || accessibleStores.length === 0) {
+    if (!profile || !accessibleStores || accessibleStores.length === 0) {
       return
     }
 
     const loadDashboardData = async () => {
       try {
+        console.log('Dashboard - Starting data load...')
         setDashboardLoading(true)
         const fromDate = format(filters.dateRange.from, 'yyyy-MM-dd')
         const toDate = format(filters.dateRange.to, 'yyyy-MM-dd')
@@ -74,6 +83,7 @@ export default function Dashboard() {
         }
         
         console.log('Dashboard loading data:', { fromDate, toDate, storeFilter, accessibleStores })
+        console.log('Dashboard - About to call getDashboardData...')
         
         // Load all dashboard data using the new service
         const data = await getDashboardData({
@@ -82,13 +92,15 @@ export default function Dashboard() {
           storeIds: storeFilter
         })
         
+        console.log('Dashboard - getDashboardData completed:', data)
         setDashboardData(data)
-        console.log('Dashboard data loaded:', data)
+        console.log('Dashboard - State updated, data loaded successfully')
         
       } catch (error) {
-        console.error('Error loading dashboard data:', error)
+        console.error('Dashboard - Error loading data:', error)
         toast.error('Failed to load dashboard data')
       } finally {
+        console.log('Dashboard - Setting loading to false')
         setDashboardLoading(false)
       }
     }
@@ -152,7 +164,7 @@ export default function Dashboard() {
               <Loader2 className="h-8 w-8 animate-spin" />
               <span className="ml-2">Loading dashboard data...</span>
             </div>
-          ) : filters && (
+          ) : (
           <>
             {/* Primary Metrics Row */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
@@ -276,14 +288,11 @@ export default function Dashboard() {
               <CardHeader>
                 <CardTitle>Recent Sales</CardTitle>
                 <CardDescription>
-                  {filters?.dateRange ? 
-                    `Latest transactions from ${format(filters.dateRange.from, 'MMM dd')} - ${format(filters.dateRange.to, 'MMM dd, yyyy')}` :
-                    'Latest sales transactions across all stores'
-                  }
+                  {`Latest transactions from ${format(filters.dateRange.from, 'MMM dd')} - ${format(filters.dateRange.to, 'MMM dd, yyyy')}`}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {dashboardLoading && filters ? (
+                {dashboardLoading ? (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     <span className="ml-2 text-sm">Loading recent sales...</span>

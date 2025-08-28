@@ -73,10 +73,18 @@ export default function HandBillsPage() {
   const { profile } = useAuth()
   const { accessibleStores } = useStore()
   const [handBills, setHandBills] = useState<HandBillSummary[]>([])
-  const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState<FilterState | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [filters, setFilters] = useState<FilterState>({
+    dateRange: {
+      from: new Date(),
+      to: new Date(),
+      preset: 'Today'
+    },
+    storeIds: [],
+    storeId: null
+  })
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedBill, setSelectedBill] = useState(null)
+  const [selectedBill, setSelectedBill] = useState<HandBillSummary | null>(null)
   
   // Edit hand bill state
   const [editingBill, setEditingBill] = useState<HandBillSummary | null>(null)
@@ -109,7 +117,7 @@ export default function HandBillsPage() {
 
   // Load hand bills data when filters change
   useEffect(() => {
-    if (!filters || !profile || !accessibleStores || accessibleStores.length === 0) {
+    if (!profile || !accessibleStores || accessibleStores.length === 0) {
       return
     }
 
@@ -186,6 +194,10 @@ export default function HandBillsPage() {
         return
       }
 
+      if (!editingBill?.id) {
+        throw new Error('Invalid hand bill ID')
+      }
+      
       await updateHandBill(editingBill.id, {
         bill_number: editFormData.bill_number,
         total_amount: amount,
@@ -197,7 +209,7 @@ export default function HandBillsPage() {
 
       // Update local state
       setHandBills(prev => prev.map(bill => 
-        bill.id === editingBill.id 
+        bill.id === editingBill?.id 
           ? { 
               ...bill, 
               bill_number: editFormData.bill_number,
@@ -383,7 +395,7 @@ export default function HandBillsPage() {
                   </TableHeader>
                   <TableBody>
                     {filteredBills.map((bill) => (
-                      <TableRow key={bill.id}>
+                      <TableRow key={bill.id || 'bill-' + Math.random()}>
                         <TableCell>
                           {bill.image_url ? (
                             <Dialog>
@@ -451,13 +463,13 @@ export default function HandBillsPage() {
                                 {new Date(bill.bill_date).toLocaleDateString('en-IN')}
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                {new Date(bill.created_at).toLocaleTimeString('en-IN')}
+                                {bill.created_at ? new Date(bill.created_at).toLocaleTimeString('en-IN') : '-'}
                               </p>
                             </div>
                           </div>
                         </TableCell>
                         <TableCell>
-                          {getStatusBadge(bill.status)}
+                          {getStatusBadge(bill.status || 'pending')}
                           {bill.status === 'converted' && (
                             <p className="text-xs text-muted-foreground mt-1">
                               Sale: Converted
@@ -500,7 +512,7 @@ export default function HandBillsPage() {
                                     </div>
                                     <div>
                                       <p className="text-sm font-medium">Status</p>
-                                      {getStatusBadge(bill.status)}
+                                      {getStatusBadge(bill.status || 'pending')}
                                     </div>
                                   </div>
                                   
@@ -567,7 +579,7 @@ export default function HandBillsPage() {
                             </Dialog>
                             
                             {bill.status === 'pending' && (
-                              <Link href={`/hand-bills/convert/${bill.id}`}>
+                              <Link href={`/hand-bills/convert/${bill.id}`} style={!bill.id ? {pointerEvents: 'none', opacity: 0.5} : {}}>
                                 <Button size="sm">
                                   Convert
                                 </Button>

@@ -91,10 +91,18 @@ export default function RRNsPage() {
   const { profile } = useAuth()
   const { accessibleStores } = useStore()
   const [returns, setReturns] = useState<ReturnSummary[]>([])
-  const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState<FilterState | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [filters, setFilters] = useState<FilterState>({
+    dateRange: {
+      from: new Date(),
+      to: new Date(),
+      preset: 'Today'
+    },
+    storeIds: [],
+    storeId: null
+  })
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedRRN, setSelectedRRN] = useState(null)
+  const [selectedRRN, setSelectedRRN] = useState<ReturnSummary | null>(null)
   
   // Edit return state
   const [editingReturn, setEditingReturn] = useState<ReturnSummary | null>(null)
@@ -127,7 +135,7 @@ export default function RRNsPage() {
 
   // Load returns data when filters change
   useEffect(() => {
-    if (!filters || !profile || !accessibleStores || accessibleStores.length === 0) {
+    if (!profile || !accessibleStores || accessibleStores.length === 0) {
       return
     }
 
@@ -208,6 +216,10 @@ export default function RRNsPage() {
         return
       }
 
+      if (!editingReturn?.id) {
+        throw new Error('Invalid return ID')
+      }
+      
       await updateReturn(editingReturn.id, {
         original_bill_reference: editFormData.original_bill_reference,
         return_amount: amount,
@@ -415,7 +427,7 @@ export default function RRNsPage() {
                                 {new Date(returnItem.return_date).toLocaleDateString('en-IN')}
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                {new Date(returnItem.created_at).toLocaleTimeString('en-IN')}
+                                {returnItem.created_at ? new Date(returnItem.created_at).toLocaleTimeString('en-IN') : 'Unknown time'}
                               </p>
                             </div>
                           </div>

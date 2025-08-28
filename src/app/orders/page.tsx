@@ -49,37 +49,40 @@ export default function OrdersPage() {
   const { profile } = useAuth()
   const { accessibleStores } = useStore()
   const [orders, setOrders] = useState<SalesOrderSummary[]>([])
-  const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState<FilterState | null>(null)
+  const [loading, setLoading] = useState(false)  // Start with false
+  const [filters, setFilters] = useState<FilterState>({
+    dateRange: {
+      from: new Date(),
+      to: new Date(),
+      preset: 'Today'
+    },
+    storeIds: [],
+    storeId: null
+  })
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedOrder, setSelectedOrder] = useState(null)
+  const [selectedOrder, setSelectedOrder] = useState<SalesOrderSummary | null>(null)
 
-  // Initialize default filters on mount  
-  useEffect(() => {
-    if (!filters) {
-      // Set default to "Today" if no filters set yet
-      const today = new Date()
-      setFilters({
-        dateRange: {
-          from: today,
-          to: today,
-          preset: 'Today'
-        },
-        storeIds: [], // Will be set by FilterBar based on user permissions
-        storeId: null // All stores by default
-      })
-    }
-  }, [filters])
+  // Remove manual filter initialization - now handled by FilterBar
 
   // Load orders data when filters change
   useEffect(() => {
-    if (!filters || !profile || !accessibleStores || accessibleStores.length === 0) {
+    if (!profile || !accessibleStores || accessibleStores.length === 0) {
+      // Don't show loading if we're just waiting for initial setup
       return
     }
 
     const loadOrdersData = async () => {
       try {
         setLoading(true)
+        
+        // Add timeout to prevent indefinite loading
+        const timeoutId = setTimeout(() => {
+          console.error('Orders loading timed out')
+          toast.error('Loading timed out. Please refresh the page.')
+          setLoading(false)
+          setOrders([])
+        }, 15000) // 15 second timeout
+        
         const fromDate = format(filters.dateRange.from, 'yyyy-MM-dd')
         const toDate = format(filters.dateRange.to, 'yyyy-MM-dd')
         
@@ -98,6 +101,8 @@ export default function OrdersPage() {
         
         console.log('Loading orders with filter:', { fromDate, toDate, storeFilter })
         const ordersData = await getSalesOrdersForDateRange(fromDate, toDate, storeFilter)
+        clearTimeout(timeoutId)
+        
         console.log('Orders loaded:', ordersData)
         setOrders(ordersData || [])
       } catch (error) {
@@ -173,7 +178,7 @@ export default function OrdersPage() {
           />
 
           {/* Summary Stats */}
-          {!loading && filters && (
+          {!loading && (
           <div className="grid gap-4 md:grid-cols-5 mb-8">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -249,10 +254,7 @@ export default function OrdersPage() {
                 <div>
                   <CardTitle>Sales Orders {!loading && `(${filteredOrders.length})`}</CardTitle>
                   <CardDescription>
-                    {filters?.dateRange ? 
-                      `Orders from ${format(filters.dateRange.from, 'MMM dd')} - ${format(filters.dateRange.to, 'MMM dd, yyyy')}` :
-                      'Track and manage sales order lifecycle'
-                    }
+                    {`Orders from ${format(filters.dateRange.from, 'MMM dd')} - ${format(filters.dateRange.to, 'MMM dd, yyyy')}`}
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
@@ -324,14 +326,14 @@ export default function OrdersPage() {
                         <TableCell>
                           <div>
                             <div className="mb-2">
-                              {getStatusBadge(order.status)}
+                              {getStatusBadge(order.status || 'pending')}
                             </div>
                             <div className="flex items-center gap-1 text-xs text-muted-foreground">
                               <Calendar className="h-3 w-3" />
                               {order.status === 'delivered' ? (
-                                <span>Converted {new Date(order.updated_at || order.created_at).toLocaleDateString('en-IN')}</span>
+                                <span>Converted {(order.updated_at || order.created_at) ? new Date(order.updated_at || order.created_at || '').toLocaleDateString('en-IN') : 'Unknown date'}</span>
                               ) : (
-                                <span>Created {new Date(order.created_at).toLocaleDateString('en-IN')}</span>
+                                <span>Created {order.created_at ? new Date(order.created_at).toLocaleDateString('en-IN') : 'Unknown date'}</span>
                               )}
                             </div>
                           </div>
@@ -363,7 +365,7 @@ export default function OrdersPage() {
                                     </div>
                                     <div>
                                       <p className="text-sm font-medium">Status</p>
-                                      {getStatusBadge(order.status)}
+                                      {getStatusBadge(order.status || 'pending')}
                                     </div>
                                   </div>
                                   
@@ -374,7 +376,7 @@ export default function OrdersPage() {
                                     </div>
                                     <div>
                                       <p className="text-sm font-medium">Balance Due</p>
-                                      <p className="text-sm font-semibold text-red-600">{formatCurrency(order.balance_due)}</p>
+                                      <p className="text-sm font-semibold text-red-600">{formatCurrency(order.balance_due || 0)}</p>
                                     </div>
                                   </div>
                                   
@@ -394,20 +396,20 @@ export default function OrdersPage() {
                                     <div>
                                       <p className="text-sm font-medium">Delivery Date</p>
                                       <p className="text-sm text-muted-foreground">
-                                        {new Date(order.delivery_date).toLocaleDateString('en-IN')}
+                                        {order.delivery_date ? new Date(order.delivery_date).toLocaleDateString('en-IN') : 'Not set'}
                                       </p>
                                     </div>
                                   </div>
                                   
                                   <div>
                                     <p className="text-sm font-medium">Items</p>
-                                    <p className="text-sm text-muted-foreground">{order.items_count} items ordered</p>
+                                    <p className="text-sm text-muted-foreground">{order.items_count || 0} items ordered</p>
                                   </div>
                                 </div>
                               </DialogContent>
                             </Dialog>
                             
-                            {canEditTransaction(order.status, profile?.role || 'cashier') && (
+                            {canEditTransaction(order.status || 'pending', profile?.role || 'cashier') && (
                               <Link href={`/orders/edit/${order.id}`}>
                                 <Button size="sm" variant="secondary">
                                   <Edit className="h-4 w-4 mr-1" />

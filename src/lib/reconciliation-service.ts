@@ -64,7 +64,7 @@ export async function getPendingTransactionsForDate(
         date: sale.sale_date,
         amount: sale.amount,
         description: `Sale - ${sale.tender_type} - ${sale.notes || ''}`,
-        store_name: sale.stores.store_name,
+        store_name: (sale.stores as any)?.store_name || 'Unknown',
         tender_type: sale.tender_type,
         status: sale.status,
         created_at: sale.created_at
@@ -98,7 +98,7 @@ export async function getPendingTransactionsForDate(
         date: expense.expense_date,
         amount: expense.amount,
         description: `${expense.category} - ${expense.description}`,
-        store_name: expense.stores.store_name,
+        store_name: (expense.stores as any)?.store_name || 'Unknown',
         status: expense.status,
         created_at: expense.created_at,
         image_url: expense.voucher_image_url
@@ -131,7 +131,7 @@ export async function getPendingTransactionsForDate(
         date: returnItem.return_date,
         amount: returnItem.return_amount,
         description: `Return - ${returnItem.original_bill_reference} - ${returnItem.reason || ''}`,
-        store_name: returnItem.stores.store_name,
+        store_name: (returnItem.stores as any)?.store_name || 'Unknown',
         status: returnItem.status,
         created_at: returnItem.created_at
       })))
@@ -164,7 +164,7 @@ export async function getPendingTransactionsForDate(
         date: bill.bill_date,
         amount: bill.total_amount,
         description: `Hand Bill - ${bill.bill_number}`,
-        store_name: bill.stores.store_name,
+        store_name: (bill.stores as any)?.store_name || 'Unknown',
         tender_type: bill.tender_type,
         status: bill.status,
         created_at: bill.created_at,

@@ -54,6 +54,8 @@ export default function NewOrderPage() {
     }
     
     console.log('Validating customer:', customer)
+    console.log('Customer has ID?', !!customer?.id)
+    console.log('Customer object keys:', customer ? Object.keys(customer) : 'no customer')
     if (!customer || !customer.id) {
       console.log('Customer validation failed - customer:', customer)
       errors.push("Customer information is required")
@@ -79,34 +81,47 @@ export default function NewOrderPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    console.log('Form submission started')
+    
     const validationErrors = validateForm()
     if (validationErrors.length > 0) {
+      console.log('Validation errors:', validationErrors)
       validationErrors.forEach(error => toast.error(error))
       return
     }
     
+    console.log('Validation passed, setting loading to true')
     setLoading(true)
 
     try {
+      console.log('Starting order creation process...')
+      console.log('Customer data:', customer)
       let customerId = customer.id
+      console.log('Customer ID:', customerId)
       
-      if (!customerId && customer.name && customer.phone) {
+      if (!customerId && (customer.name || customer.customer_name) && customer.phone) {
+        console.log('Creating new customer...')
         const newCustomer = await createCustomer({
-          customer_name: customer.name,
+          customer_name: customer.customer_name || customer.name,
           phone: customer.phone,
           email: customer.email || undefined
         })
         customerId = newCustomer.id
+        console.log('New customer created with ID:', customerId)
       }
 
+      console.log('Parsing amounts...')
       const totalAmount = parseFloat(formData.total_amount || '0')
       const advanceAmount = parseFloat(formData.advance_amount || '0')
+      console.log('Amounts parsed:', { totalAmount, advanceAmount })
       
+      console.log('Building order data...')
       const orderData = {
         store_id: formData.store_id,
+        order_date: new Date().toISOString().split('T')[0], // Add current date
         order_number: formData.order_number.toUpperCase(),
         customer_id: customerId,
-        customer_name: customer.name,
+        customer_name: customer.customer_name || customer.name, // Handle both naming conventions
         customer_phone: customer.phone,
         items_description: 'Sales order items', // Simple placeholder since items aren't detailed yet
         total_amount: totalAmount,
@@ -115,8 +130,11 @@ export default function NewOrderPage() {
         status: 'pending' as const,
         notes: formData.notes || undefined
       }
-
+      
+      console.log('Order data built:', orderData)
+      console.log('About to call createSalesOrder...')
       await createSalesOrder(orderData)
+      console.log('createSalesOrder completed successfully')
       
       toast.success(`Sales order ${formData.order_number.toUpperCase()} created successfully!`)
       
@@ -126,7 +144,40 @@ export default function NewOrderPage() {
       
     } catch (error) {
       console.error('Error creating sales order:', error)
-      toast.error("Failed to create order. Please try again.")
+      
+      // Parse specific database errors for better user feedback
+      let errorMessage = "Failed to create order. Please try again."
+      
+      if (error && typeof error === 'object' && 'code' in error) {
+        const dbError = error as any
+        
+        switch (dbError.code) {
+          case '23505': // Unique constraint violation
+            if (dbError.details?.includes('order_number')) {
+              errorMessage = `Order number "${formData.order_number}" already exists for this store. Please use a different order number.`
+            } else {
+              errorMessage = "This order conflicts with existing data. Please check your inputs."
+            }
+            break
+            
+          case '23502': // Not null constraint violation
+            if (dbError.details?.includes('customer_name')) {
+              errorMessage = "Customer information is missing. Please select or create a customer."
+            } else {
+              errorMessage = "Required information is missing. Please check all fields."
+            }
+            break
+            
+          case '23503': // Foreign key constraint violation
+            errorMessage = "Invalid store or customer selection. Please refresh and try again."
+            break
+            
+          default:
+            errorMessage = `Database error: ${dbError.message || 'Unknown error'}`
+        }
+      }
+      
+      toast.error(errorMessage)
     } finally {
       setLoading(false)
     }

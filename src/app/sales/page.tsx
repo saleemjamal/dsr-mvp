@@ -23,13 +23,14 @@ import { canEditTransaction } from "@/lib/reconciliation-service"
 import { toast } from "sonner"
 
 interface SaleWithStore {
-  id: string
+  id?: string
   store_id: string
   sale_date: string
   tender_type: string
   amount: number
-  notes: string | null
-  created_at: string
+  notes?: string
+  status?: string
+  created_at?: string
   stores: {
     store_name: string
     store_code: string
@@ -58,8 +59,16 @@ export default function SalesPage() {
   const { profile } = useAuth()
   const { accessibleStores, isAllStoresSelected } = useStore()
   const [sales, setSales] = useState<SaleWithStore[]>([])
-  const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState<FilterState | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [filters, setFilters] = useState<FilterState>({
+    dateRange: {
+      from: new Date(),
+      to: new Date(),
+      preset: 'Today'
+    },
+    storeIds: [],
+    storeId: null
+  })
   
   // Edit sale state
   const [editingSale, setEditingSale] = useState<SaleWithStore | null>(null)
@@ -70,26 +79,11 @@ export default function SalesPage() {
     notes: ''
   })
 
-  // Initialize default filters on mount  
-  useEffect(() => {
-    if (!filters) {
-      // Set default to "Today" if no filters set yet
-      const today = new Date()
-      setFilters({
-        dateRange: {
-          from: today,
-          to: today,
-          preset: 'Today'
-        },
-        storeIds: [], // Will be set by FilterBar based on user permissions
-        storeId: null // All stores by default
-      })
-    }
-  }, [filters])
+  // Remove manual filter initialization - now handled by FilterBar
 
   // Load sales data when filters change
   useEffect(() => {
-    if (!filters || !profile || !accessibleStores || accessibleStores.length === 0) return
+    if (!profile || !accessibleStores || accessibleStores.length === 0) return
 
     const loadSalesData = async () => {
       try {
@@ -161,6 +155,10 @@ export default function SalesPage() {
         return
       }
 
+      if (!editingSale?.id) {
+        throw new Error('Invalid sale ID')
+      }
+      
       await updateSale(editingSale.id, {
         amount,
         tender_type: editFormData.tender_type,
@@ -319,10 +317,10 @@ export default function SalesPage() {
                               {sale.notes || '-'}
                             </TableCell>
                             <TableCell>
-                              {new Date(sale.created_at).toLocaleTimeString('en-IN', {
+                              {sale.created_at ? new Date(sale.created_at).toLocaleTimeString('en-IN', {
                                 hour: '2-digit',
                                 minute: '2-digit'
-                              })}
+                              }) : '--:--'}
                             </TableCell>
                             <TableCell>
                               {canEditTransaction(sale.status || 'pending', profile?.role || 'cashier') && (
@@ -390,10 +388,10 @@ export default function SalesPage() {
                           {formatCurrency(sale.amount)}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {new Date(sale.created_at).toLocaleTimeString('en-IN', {
+                          {sale.created_at ? new Date(sale.created_at).toLocaleTimeString('en-IN', {
                             hour: '2-digit',
                             minute: '2-digit'
-                          })}
+                          }) : '--:--'}
                         </span>
                       </div>
                       {sale.notes && (

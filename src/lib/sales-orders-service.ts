@@ -17,7 +17,8 @@ export interface SalesOrder {
   balance_tender_type?: string
   balance_payment_date?: string
   delivery_date?: string
-  status?: 'pending' | 'confirmed' | 'delivered' | 'cancelled'
+  tender_type?: string
+  status?: 'pending' | 'confirmed' | 'delivered' | 'cancelled' | 'reconciled'
   notes?: string
   converted_sale_id?: string
   created_at?: string
@@ -25,17 +26,25 @@ export interface SalesOrder {
 }
 
 export interface SalesOrderSummary {
-  id: string
+  id?: string
   order_date: string
   order_number?: string
   customer_name: string
   customer_phone?: string
   total_amount: number
-  advance_amount: number
-  balance_amount: number
+  advance_amount?: number
+  balance_amount?: number
+  balance_due?: number
   delivery_date?: string
-  status: string
-  created_at: string
+  status?: string
+  tender_type?: string
+  items_count?: number
+  created_at?: string
+  updated_at?: string
+  stores?: {
+    store_name: string
+    store_code: string
+  }
 }
 
 export interface OrderStatusUpdate {
@@ -113,22 +122,23 @@ export async function getTodaysSalesOrders(storeId?: string): Promise<SalesOrder
 }
 
 export async function getSalesOrderById(id: string): Promise<SalesOrder | null> {
-  const { data, error } = await supabase
-    .from('sales_orders')
-    .select('*')
-    .eq('id', id)
-    .limit(1)
+  try {
+    const { data, error } = await supabase
+      .from('sales_orders')
+      .select('*')
+      .eq('id', id)
 
-  if (error) {
-    console.error('Error fetching sales order:', error)
+    if (error) {
+      console.error('Error fetching sales order:', error)
+      return null
+    }
+    
+    // Return first item if found, null otherwise
+    return data && data.length > 0 ? data[0] as SalesOrder : null
+  } catch (err) {
+    console.error('Exception fetching sales order:', err)
     return null
   }
-  
-  if (!data || data.length === 0) {
-    return null
-  }
-  
-  return data[0] as SalesOrder
 }
 
 export async function getSalesOrdersByStatus(status: SalesOrder['status'], storeId?: string): Promise<SalesOrderSummary[]> {
@@ -322,7 +332,6 @@ export async function updateSalesOrder(id: string, updates: Partial<SalesOrder>)
     id,
     ...updates
   }
-  return data
 }
 
 export async function deleteSalesOrder(id: string) {

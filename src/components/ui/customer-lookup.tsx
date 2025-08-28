@@ -8,15 +8,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { User, Phone, Mail, Plus, Search, UserPlus } from "lucide-react"
 import { toast } from "sonner"
-import { searchCustomers, createCustomer, CustomerSearchResult } from "@/lib/customer-service"
-
-
-interface Customer {
-  id: string
-  name: string
-  phone: string
-  email?: string
-}
+import { searchCustomers, createCustomer, CustomerSearchResult, Customer } from "@/lib/customer-service"
 
 interface CustomerLookupProps {
   onCustomerSelect: (customer: Customer | null) => void
@@ -56,9 +48,9 @@ export function CustomerLookup({ onCustomerSelect, initialPhone = "", allowNewCu
       console.log('Search results:', results)
       
       if (results.length > 0) {
-        const foundCustomer = {
+        const foundCustomer: Customer = {
           id: results[0].id,
-          name: results[0].customer_name,
+          customer_name: results[0].customer_name,
           phone: results[0].phone || '',
           email: results[0].email || ''
         }
@@ -116,7 +108,7 @@ export function CustomerLookup({ onCustomerSelect, initialPhone = "", allowNewCu
       
       const newCustomer: Customer = {
         id: createdCustomer.id!,
-        name: createdCustomer.customer_name,
+        customer_name: createdCustomer.customer_name,
         phone: createdCustomer.phone || '',
         email: createdCustomer.email || ''
       }
@@ -248,35 +240,25 @@ export function CustomerLookup({ onCustomerSelect, initialPhone = "", allowNewCu
             </Dialog>
           )}
         </div>
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-            <Input
-              id="customer_phone"
-              type="tel"
-              placeholder="+91 98765 43210"
-              value={phone}
-              onChange={(e) => handlePhoneChange(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleLookup()}
-              className="pl-10"
-              required
-            />
-          </div>
-          <Button 
-            type="button"
-            variant="outline"
-            onClick={() => handleLookup()}
-            disabled={loading || !phone.trim()}
-          >
-            {loading ? (
-              <Search className="h-4 w-4 animate-spin" />
-            ) : (
-              <Search className="h-4 w-4" />
-            )}
-          </Button>
+        <div className="relative">
+          <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <Input
+            id="customer_phone"
+            type="tel"
+            placeholder="+91 98765 43210"
+            value={phone}
+            onChange={(e) => handlePhoneChange(e.target.value)}
+            onBlur={() => phone.trim() && handleLookup()}
+            onKeyDown={(e) => e.key === 'Enter' && handleLookup()}
+            className="pl-10 pr-10"
+            required
+          />
+          {loading && (
+            <Search className="absolute right-3 top-3 h-4 w-4 animate-spin text-muted-foreground" />
+          )}
         </div>
         <p className="text-xs text-muted-foreground">
-          Enter phone number to lookup existing customer or click "Add New" to create one
+          Enter phone number - customer lookup happens automatically when you tab out
         </p>
       </div>
 
@@ -289,7 +271,7 @@ export function CustomerLookup({ onCustomerSelect, initialPhone = "", allowNewCu
                 <User className="h-4 w-4 text-green-600 dark:text-green-300" />
               </div>
               <div className="flex-1">
-                <p className="font-medium text-green-900 dark:text-green-100">{customer.name}</p>
+                <p className="font-medium text-green-900 dark:text-green-100">{customer.customer_name}</p>
                 <div className="flex items-center gap-4 text-sm text-green-700 dark:text-green-300">
                   <span className="flex items-center gap-1">
                     <Phone className="h-3 w-3" />

@@ -45,7 +45,6 @@ export async function createExpense(expense: Omit<Expense, 'id' | 'created_at' |
     .from('expenses')
     .insert([expense])
     .select()
-    .limit(1)
 
   if (error) {
     console.error('Error creating expense:', error)

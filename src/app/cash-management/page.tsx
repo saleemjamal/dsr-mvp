@@ -72,23 +72,31 @@ const mockCashHistory = [
 
 export default function CashManagementPage() {
   const { profile } = useAuth()
-  const { accessibleStores, selectedStore } = useStore()
-  const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState<FilterState | null>(null)
+  const { accessibleStores, currentStore } = useStore()
+  const [loading, setLoading] = useState(false)
+  const [filters, setFilters] = useState<FilterState>({
+    dateRange: {
+      from: new Date(),
+      to: new Date(),
+      preset: 'Today'
+    },
+    storeIds: [],
+    storeId: null
+  })
   const [cashData, setCashData] = useState<CashData | null>(null)
   const [cashHistory, setCashHistory] = useState(mockCashHistory)
 
   // Load cash management data when filters change
   useEffect(() => {
-    if (!filters || !profile || !accessibleStores || accessibleStores.length === 0) return
+    if (!profile || !accessibleStores || accessibleStores.length === 0) return
 
     const loadCashData = async () => {
       try {
         setLoading(true)
         const date = format(filters.dateRange.to, 'yyyy-MM-dd') // Use 'to' date for counting day
         
-        // Use selected store or first accessible store
-        const storeId = selectedStore?.id || accessibleStores[0]?.id
+        // Use current store or first accessible store
+        const storeId = currentStore?.id || accessibleStores[0]?.id
         if (!storeId) {
           throw new Error('No store selected')
         }
@@ -138,7 +146,7 @@ export default function CashManagementPage() {
     }
 
     loadCashData()
-  }, [filters, profile, accessibleStores, selectedStore])
+  }, [filters, profile, accessibleStores, currentStore])
 
   const handleFiltersChange = (newFilters: FilterState) => {
     setFilters(newFilters)
@@ -328,7 +336,7 @@ export default function CashManagementPage() {
                     <div>
                       <h4 className="font-medium text-orange-900 dark:text-orange-100">Low Petty Cash Alert</h4>
                       <p className="text-sm text-orange-700 dark:text-orange-300">
-                        Petty cash balance ({formatCurrency(cashData.pettyCash.balance)}) is below the threshold of {formatCurrency(cashData.pettyCash.lowThreshold)}. 
+                        Petty cash balance ({formatCurrency(cashData?.pettyCash.balance || 0)}) is below the threshold of {formatCurrency(cashData?.pettyCash.lowThreshold || 0)}. 
                         Consider requesting a transfer from sales cash.
                       </p>
                     </div>
@@ -405,7 +413,7 @@ export default function CashManagementPage() {
                           )}
                         </TableCell>
                         <TableCell className="font-medium">
-                          {formatCurrency(activity.actual || activity.amount)}
+                          {formatCurrency(activity.actual || activity.amount || 0)}
                         </TableCell>
                         <TableCell>
                           {activity.variance !== undefined ? (

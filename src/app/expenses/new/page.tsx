@@ -31,7 +31,7 @@ interface ExpenseRow {
 
 export default function NewExpensePage() {
   const router = useRouter()
-  const { accessibleStores, selectedStoreId } = useStore()
+  const { accessibleStores, currentStore } = useStore()
   const [loading, setLoading] = useState(false)
   const [stores, setStores] = useState<Store[]>([])
   const [categories, setCategories] = useState<ExpenseCategory[]>([])
@@ -57,8 +57,8 @@ export default function NewExpensePage() {
         // Set default store for single-store users
         if (accessibleStores && accessibleStores.length === 1) {
           setStoreId(accessibleStores[0].id)
-        } else if (selectedStoreId) {
-          setStoreId(selectedStoreId)
+        } else if (currentStore?.id) {
+          setStoreId(currentStore.id)
         }
       } catch (error) {
         console.error('Error loading data:', error)
@@ -68,7 +68,7 @@ export default function NewExpensePage() {
       }
     }
     loadData()
-  }, [accessibleStores, selectedStoreId])
+  }, [accessibleStores, currentStore])
 
   const addExpenseRow = () => {
     const newRow: ExpenseRow = {
@@ -160,12 +160,12 @@ export default function NewExpensePage() {
 
       // Upload all images in parallel
       const expensePromises = validExpenses.map(async (expense): Promise<Omit<Expense, 'id' | 'created_at' | 'updated_at'>> => {
-        let imageUrl: string | undefined
+        let imageUrl: string | null = null
 
         if (expense.imageData?.dataUrl) {
           console.log(`Uploading image for ${expense.category} expense...`)
           const imagePath = generateImagePath(storeId, 'expense')
-          imageUrl = await uploadImage('expenses', imagePath, expense.imageData.dataUrl)
+          imageUrl = await uploadImage('expenses', imagePath, expense.imageData.dataUrl || '')
           
           if (!imageUrl) {
             throw new Error(`Failed to upload image for ${expense.category} expense`)
@@ -179,7 +179,7 @@ export default function NewExpensePage() {
           category: expense.category,
           amount: parseFloat(expense.amount),
           description: expense.description || '',
-          voucher_image_url: imageUrl
+          voucher_image_url: imageUrl || undefined
         }
       })
 

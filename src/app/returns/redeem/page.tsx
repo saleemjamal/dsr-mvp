@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
@@ -14,7 +14,23 @@ import { ArrowLeft, Search, RotateCcw, User, Calendar, IndianRupee, Receipt, Che
 import { toast } from "sonner"
 import Link from "next/link"
 
-const mockRRNs = [
+interface MockRRNRedeem {
+  id: string
+  rrn_number: string
+  sales_bill_number: string
+  rrn_amount: number
+  balance: number
+  tender_type: string
+  customer_name: string
+  customer_phone: string
+  return_reason: string
+  status: string
+  rrn_date: string
+  expiry_date: string
+  remarks: string
+}
+
+const mockRRNs: MockRRNRedeem[] = [
   {
     id: "1",
     rrn_number: "RRN001",
@@ -105,12 +121,12 @@ const getReturnReasonBadge = (reason: string) => {
   )
 }
 
-export default function RedeemRRNPage() {
+function RedeemRRNContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [rrnNumber, setRrnNumber] = useState("")
   const [purchaseAmount, setPurchaseAmount] = useState("")
-  const [rrn, setRrn] = useState(null)
+  const [rrn, setRrn] = useState<MockRRNRedeem | null>(null)
   const [loading, setLoading] = useState(false)
   const [redeeming, setRedeeming] = useState(false)
   
@@ -512,5 +528,30 @@ export default function RedeemRRNPage() {
         </main>
       </div>
     </div>
+  )
+}
+
+export default function RedeemRRNPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen">
+        <aside className="hidden lg:block w-64 border-r">
+          <Sidebar />
+        </aside>
+        <div className="flex-1">
+          <Header />
+          <main className="p-6">
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                <p className="mt-2 text-muted-foreground">Loading...</p>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    }>
+      <RedeemRRNContent />
+    </Suspense>
   )
 }

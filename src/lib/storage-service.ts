@@ -161,14 +161,14 @@ export async function uploadImage(
       console.error('Error uploading image:', error)
       console.error('Error details:', {
         message: error.message,
-        statusCode: error.statusCode,
+        name: error.name,
         bucket: bucket,
         path: path,
         fileSize: `${(file.size / 1024 / 1024).toFixed(2)}MB`
       })
       
       // Check if it's a bucket not found error
-      if (error.message?.includes('Bucket not found') || error.statusCode === 404) {
+      if (error.message?.includes('Bucket not found') || error.message?.includes('404')) {
         console.error(`Storage bucket '${bucket}' does not exist. Please run the create_storage_buckets.sql migration.`)
       }
       

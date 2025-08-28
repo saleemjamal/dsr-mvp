@@ -18,15 +18,15 @@ export interface HandBill {
 }
 
 export interface HandBillSummary {
-  id: string
+  id?: string
   bill_date: string
   bill_number?: string
   total_amount: number
   tender_type: string
   customer_name?: string
-  status: string
+  status?: string
   image_url?: string
-  created_at: string
+  created_at?: string
   stores?: {
     store_name: string
     store_code: string

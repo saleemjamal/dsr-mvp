@@ -42,7 +42,6 @@ export async function createSale(sale: Omit<Sale, 'id' | 'created_at' | 'created
     .from('sales')
     .insert([sale])
     .select()
-    .limit(1)
 
   if (error) throw error
   
@@ -62,7 +61,6 @@ export async function updateSale(id: string, updates: Partial<Omit<Sale, 'id' | 
     })
     .eq('id', id)
     .select()
-    .limit(1)
 
   if (error) throw error
   

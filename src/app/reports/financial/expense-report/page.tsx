@@ -19,14 +19,14 @@ import { getExpensesForDateRange, getActiveExpenseCategories, type ExpenseCatego
 import { toast } from "sonner"
 
 interface ExpenseWithStore {
-  id: string
+  id?: string
   store_id: string
   expense_date: string
   category: string
   amount: number
   description: string
   voucher_image_url?: string
-  created_at: string
+  created_at?: string
   stores: {
     store_name: string
   }
@@ -474,7 +474,7 @@ export default function ExpenseReportPage() {
                                     {format(new Date(expense.expense_date), 'MMM dd, yyyy')}
                                   </p>
                                   <p className="text-sm text-muted-foreground">
-                                    {format(new Date(expense.created_at), 'HH:mm')}
+                                    {expense.created_at ? format(new Date(expense.created_at), 'HH:mm') : '--:--'}
                                   </p>
                                 </div>
                               </TableCell>

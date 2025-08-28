@@ -360,7 +360,7 @@ export default function TallyExportPage() {
                               <Checkbox 
                                 id="include-gst" 
                                 checked={includeGST}
-                                onCheckedChange={setIncludeGST}
+                                onCheckedChange={(checked) => setIncludeGST(!!checked)}
                               />
                               <Label htmlFor="include-gst" className="text-sm">
                                 Include GST calculations and tax breakdowns
@@ -371,7 +371,7 @@ export default function TallyExportPage() {
                               <Checkbox 
                                 id="group-by-store" 
                                 checked={groupByStore}
-                                onCheckedChange={setGroupByStore}
+                                onCheckedChange={(checked) => setGroupByStore(!!checked)}
                               />
                               <Label htmlFor="group-by-store" className="text-sm">
                                 Group transactions by store location

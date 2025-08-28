@@ -80,7 +80,7 @@ const mockTenderTypes = [
   }
 ]
 
-const iconComponents = {
+const iconComponents: Record<string, any> = {
   Banknote,
   Smartphone,
   CreditCard,
@@ -91,7 +91,7 @@ const iconComponents = {
 export default function TenderTypesManagementPage() {
   const [tenderTypes, setTenderTypes] = useState(mockTenderTypes)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [editingType, setEditingType] = useState(null)
+  const [editingType, setEditingType] = useState<typeof mockTenderTypes[0] | null>(null)
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     code: '',
@@ -148,7 +148,7 @@ export default function TenderTypesManagementPage() {
     }
   }
 
-  const handleEdit = (type) => {
+  const handleEdit = (type: typeof mockTenderTypes[0]) => {
     setEditingType(type)
     setFormData({
       code: type.code,
@@ -176,7 +176,7 @@ export default function TenderTypesManagementPage() {
   const handleDelete = (typeId: string) => {
     const type = tenderTypes.find(t => t.id === typeId)
     
-    if (type.usage_count > 0) {
+    if (type && type.usage_count > 0) {
       toast.error("Cannot delete payment method that has been used in transactions")
       return
     }

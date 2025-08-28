@@ -20,7 +20,7 @@ export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [editingCustomer, setEditingCustomer] = useState(null)
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
   const [loading, setLoading] = useState(false)
   const [initialLoading, setInitialLoading] = useState(true)
   const [formData, setFormData] = useState({
@@ -58,7 +58,7 @@ export default function CustomersPage() {
     setLoading(true)
 
     try {
-      if (editingCustomer) {
+      if (editingCustomer && editingCustomer.id) {
         // Update existing customer
         await updateCustomer(editingCustomer.id, {
           customer_name: formData.name,
@@ -110,7 +110,7 @@ export default function CustomersPage() {
     }
   }
 
-  const handleEdit = (customer) => {
+  const handleEdit = (customer: Customer) => {
     setEditingCustomer(customer)
     setFormData({
       name: customer.customer_name,

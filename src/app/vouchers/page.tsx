@@ -52,10 +52,18 @@ const formatCurrency = (amount: number) => {
 export default function VouchersPage() {
   const { profile } = useAuth()
   const [vouchers, setVouchers] = useState<GiftVoucherSummary[]>([])
-  const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState<FilterState | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [filters, setFilters] = useState<FilterState>({
+    dateRange: {
+      from: new Date(),
+      to: new Date(),
+      preset: 'Today'
+    },
+    storeIds: [],
+    storeId: null
+  })
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedVoucher, setSelectedVoucher] = useState(null)
+  const [selectedVoucher, setSelectedVoucher] = useState<GiftVoucherSummary | null>(null)
   
   // Edit voucher state
   const [editingVoucher, setEditingVoucher] = useState<GiftVoucherSummary | null>(null)
@@ -80,14 +88,15 @@ export default function VouchersPage() {
           to: today,
           preset: 'Today'
         },
-        storeIds: [] // Gift vouchers are not store-specific
+        storeIds: [], // Gift vouchers are not store-specific
+        storeId: null // All stores by default
       })
     }
   }, [filters])
 
   // Load vouchers data when filters change
   useEffect(() => {
-    if (!filters || !profile) return
+    if (!profile) return
 
     const loadVouchersData = async () => {
       try {
@@ -372,10 +381,10 @@ export default function VouchersPage() {
                             <Calendar className="h-4 w-4 text-muted-foreground" />
                             <div>
                               <p className="text-sm font-medium">
-                                {new Date(voucher.expiry_date).toLocaleDateString('en-IN')}
+                                {voucher.expiry_date ? new Date(voucher.expiry_date).toLocaleDateString('en-IN') : 'Not set'}
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                {new Date(voucher.expiry_date) > new Date() 
+                                {voucher.expiry_date && new Date(voucher.expiry_date) > new Date() 
                                   ? `${Math.ceil((new Date(voucher.expiry_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days left`
                                   : 'Expired'
                                 }
@@ -453,7 +462,7 @@ export default function VouchersPage() {
                                     <div>
                                       <p className="text-sm font-medium">Expiry Date</p>
                                       <p className="text-sm text-muted-foreground">
-                                        {new Date(voucher.expiry_date).toLocaleDateString('en-IN')}
+                                        {voucher.expiry_date ? new Date(voucher.expiry_date).toLocaleDateString('en-IN') : 'Not set'}
                                       </p>
                                     </div>
                                   </div>

@@ -41,7 +41,16 @@ export default function EditOrderPage() {
     const loadOrder = async () => {
       try {
         setPageLoading(true)
+        
+        // Add timeout to prevent indefinite loading
+        const timeoutId = setTimeout(() => {
+          toast.error('Loading timed out. Please refresh the page.')
+          setPageLoading(false)
+        }, 10000) // 10 second timeout
+        
         const orderData = await getSalesOrderById(orderId)
+        clearTimeout(timeoutId)
+        
         if (!orderData) {
           toast.error('Sales order not found')
           router.push('/orders')

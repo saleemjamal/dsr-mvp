@@ -16,14 +16,14 @@ import { ArrowLeft, Gift, Calendar, IndianRupee, CreditCard, Receipt } from "luc
 import { toast } from "sonner"
 import Link from "next/link"
 import { createGiftVoucher } from "@/lib/gift-vouchers-service"
-import { createCustomer } from "@/lib/customer-service"
+import { createCustomer, type Customer } from "@/lib/customer-service"
 import { useStore } from "@/contexts/store-context"
 
 export default function NewVoucherPage() {
   const router = useRouter()
   const { currentStore, accessibleStores, canAccessMultipleStores } = useStore()
   const [loading, setLoading] = useState(false)
-  const [customer, setCustomer] = useState(null)
+  const [customer, setCustomer] = useState<Customer | null>(null)
   const [formData, setFormData] = useState({
     store_id: currentStore?.id || accessibleStores[0]?.id || '',
     voucher_number: '',
@@ -87,12 +87,17 @@ export default function NewVoucherPage() {
     setLoading(true)
 
     try {
+      if (!customer) {
+        toast.error('Please select a customer')
+        return
+      }
+      
       // Create customer if needed
       let customerId = customer.id
       
-      if (!customerId && customer.name && customer.phone) {
+      if (!customerId && customer.customer_name && customer.phone) {
         const newCustomer = await createCustomer({
-          customer_name: customer.name,
+          customer_name: customer.customer_name,
           phone: customer.phone,
           email: customer.email || undefined
         })
@@ -105,7 +110,7 @@ export default function NewVoucherPage() {
         amount: parseFloat(formData.amount),
         balance: parseFloat(formData.amount),
         status: 'active' as const,
-        customer_name: customer.name,
+        customer_name: customer.customer_name,
         customer_phone: customer.phone,
         issued_date: new Date().toISOString().split('T')[0],
         expiry_date: formData.expiry_date,
