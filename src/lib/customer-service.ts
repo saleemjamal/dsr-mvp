@@ -54,7 +54,6 @@ export async function createCustomer(customer: Omit<Customer, 'id' | 'created_at
       outstanding_balance: customer.outstanding_balance || 0
     }])
     .select()
-    .limit(1)
 
   if (error) {
     console.error('Error creating customer:', error)
@@ -121,18 +120,13 @@ export async function getCustomerById(id: string): Promise<Customer | null> {
     .from('customers')
     .select('*')
     .eq('id', id)
-    .limit(1)
 
   if (error) {
     console.error('Error fetching customer:', error)
     return null
   }
   
-  if (!data || data.length === 0) {
-    return null
-  }
-  
-  return data[0] as Customer
+  return data && data.length > 0 ? data[0] as Customer : null
 }
 
 export async function updateCustomer(id: string, updates: Partial<Customer>) {

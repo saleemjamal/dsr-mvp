@@ -38,17 +38,57 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        loadUserProfile(session.user.id)
-      } else {
-        setLoading(false)
+    let mounted = true
+    
+    const initializeAuth = async () => {
+      if (!mounted) return
+      
+      setLoading(true)
+      try {
+        // Try to refresh session first
+        let session = null
+        try {
+          const { data, error } = await supabase.auth.refreshSession()
+          if (error) {
+            console.log('Session refresh error, getting current session:', error)
+            // Fallback to getting current session
+            const result = await supabase.auth.getSession()
+            session = result.data?.session
+          } else {
+            session = data?.session
+          }
+        } catch (refreshError) {
+          console.log('Session refresh failed, getting current session:', refreshError)
+          // Fallback to getting current session
+          const { data } = await supabase.auth.getSession()
+          session = data?.session
+        }
+        
+        if (!mounted) return
+        
+        setSession(session)
+        setUser(session?.user ?? null)
+        
+        if (session?.user) {
+          await loadUserProfile(session.user.id)
+        }
+      } catch (error) {
+        console.error('Auth initialization error:', error)
+      } finally {
+        if (mounted) {
+          setLoading(false)
+        }
       }
-    })
-
+    }
+    
+    initializeAuth()
+    
+    return () => {
+      mounted = false
+    }
+  }, [])
+  
+  useEffect(() => {
     // Listen for auth changes
     const {
       data: { subscription },
@@ -60,7 +100,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         await loadUserProfile(session.user.id)
       } else {
         setProfile(null)
-        setLoading(false)
+        setLoading(false) // Only set loading false when there's no user
       }
     })
 
@@ -71,8 +111,42 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       const userProfile = await getUserProfile(userId)
       
+      if (!userProfile) {
+        console.log('No user profile found for user:', userId)
+        // Create a default profile for new Google users
+        const { data: userData } = await supabase.auth.getUser()
+        if (userData?.user?.email) {
+          console.log('Creating default profile for:', userData.user.email)
+          const { data: newProfile, error: createError } = await supabase
+            .from('user_profiles')
+            .insert({
+              id: userId,
+              email: userData.user.email,
+              full_name: userData.user.user_metadata?.full_name || userData.user.email.split('@')[0],
+              role: 'cashier', // Default role
+              is_active: true
+            })
+            .select()
+          
+          if (createError) {
+            console.error('Error creating profile:', createError)
+            // Don't sign out - let admin create profile manually
+            setProfile(null)
+            setLoading(false)
+            return
+          } else if (newProfile && newProfile.length > 0) {
+            setProfile(newProfile[0])
+            setLoading(false)
+            return
+          }
+        }
+        setProfile(null)
+        setLoading(false)
+        return
+      }
+      
       // Check if user is active - if not, sign them out
-      if (userProfile && !userProfile.is_active) {
+      if (!userProfile.is_active) {
         console.log('User is inactive, signing out')
         await supabase.auth.signOut()
         setProfile(null)
@@ -114,6 +188,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       })
       return { error }
     } finally {
+      // Always reset loading, OAuth redirect will handle the rest
       setLoading(false)
     }
   }
@@ -145,6 +220,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       window.location.href = '/auth/login'
     } catch (error) {
       console.error('Error signing out:', error)
+    } finally {
+      // Always clear loading state
       setLoading(false)
     }
   }

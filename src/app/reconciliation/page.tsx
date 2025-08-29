@@ -1,5 +1,7 @@
 "use client"
 
+export const dynamic = 'force-dynamic'
+
 import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
@@ -14,7 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Checkbox } from "@/components/ui/checkbox"
 import { CheckCircle, Clock, Search, Filter, Eye, FileText, IndianRupee, Calendar, Loader2, AlertTriangle, Image, ExternalLink } from "lucide-react"
 import { format } from "date-fns"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 import { useStore } from "@/contexts/store-context"
 import { hasPermission, Permission } from "@/lib/permissions"
 import {

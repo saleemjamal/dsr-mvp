@@ -1,5 +1,7 @@
 "use client"
 
+export const dynamic = 'force-dynamic'
+
 import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
@@ -17,7 +19,7 @@ import { ArrowLeft, Users, UserPlus, Shield, Mail, Building, Trash2, Edit, Plus,
 import Link from "next/link"
 import { toast } from "sonner"
 import { supabase } from "@/lib/supabase"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 import { PermissionGuard } from "@/components/auth/PermissionGuard"
 import { Permission, UserRole, getRoleDisplayName, getRoleColor } from "@/lib/permissions"
 import { getAllStores, assignUsersToStore, type Store } from "@/lib/store-service"
@@ -49,7 +51,7 @@ export default function UserManagementPage() {
   const [users, setUsers] = useState<UserProfile[]>([])
   const [stores, setStores] = useState<Store[]>([])
   const [whitelist, setWhitelist] = useState<WhitelistEntry[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [newWhitelistEmail, setNewWhitelistEmail] = useState("")
   const [newWhitelistDomain, setNewWhitelistDomain] = useState("")
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null)

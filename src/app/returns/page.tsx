@@ -1,5 +1,7 @@
 "use client"
 
+export const dynamic = 'force-dynamic'
+
 import { useState, useEffect } from "react"
 import { getReturnsForDateRange, updateReturn, type ReturnSummary } from "@/lib/returns-service"
 import { Sidebar } from "@/components/layout/sidebar"
@@ -17,7 +19,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { RotateCcw, Plus, Search, Calendar, IndianRupee, User, Receipt, CheckCircle, Clock, AlertTriangle, Loader2, Eye, Edit } from "lucide-react"
 import Link from "next/link"
 import { format } from "date-fns"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 import { useStore } from "@/contexts/store-context"
 import { canEditTransaction } from "@/lib/reconciliation-service"
 import { toast } from "sonner"

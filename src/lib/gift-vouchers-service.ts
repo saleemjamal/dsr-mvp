@@ -57,7 +57,6 @@ export async function createGiftVoucher(voucher: Omit<GiftVoucher, 'id' | 'creat
     .from('gift_vouchers')
     .insert([voucherData])
     .select()
-    .limit(1)
 
   if (error) {
     console.error('Error creating gift voucher:', error)
@@ -76,18 +75,13 @@ export async function getVoucherByNumber(voucherNumber: string): Promise<GiftVou
     .from('gift_vouchers')
     .select('*')
     .eq('voucher_number', voucherNumber.toUpperCase())
-    .limit(1)
 
   if (error) {
     console.error('Error fetching voucher by number:', error)
     return null
   }
   
-  if (!data || data.length === 0) {
-    return null
-  }
-  
-  return data[0] as GiftVoucher
+  return data && data.length > 0 ? data[0] as GiftVoucher : null
 }
 
 export async function getVoucherById(id: string): Promise<GiftVoucher | null> {
@@ -95,18 +89,13 @@ export async function getVoucherById(id: string): Promise<GiftVoucher | null> {
     .from('gift_vouchers')
     .select('*')
     .eq('id', id)
-    .limit(1)
 
   if (error) {
     console.error('Error fetching voucher by ID:', error)
     return null
   }
   
-  if (!data || data.length === 0) {
-    return null
-  }
-  
-  return data[0] as GiftVoucher
+  return data && data.length > 0 ? data[0] as GiftVoucher : null
 }
 
 export async function getTodaysVouchers(): Promise<GiftVoucherSummary[]> {

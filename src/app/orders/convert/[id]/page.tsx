@@ -16,7 +16,7 @@ import { toast } from "sonner"
 import Link from "next/link"
 import { getSalesOrderById, convertSalesOrderToSale, type SalesOrder } from "@/lib/sales-orders-service"
 import { canEditTransaction } from "@/lib/reconciliation-service"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 
 const getStatusBadge = (status: string) => {
   const colors = {
@@ -56,7 +56,7 @@ export default function ConvertSalesOrderPage() {
   const params = useParams()
   const { profile } = useAuth()
   const [loading, setLoading] = useState(false)
-  const [fetchingOrder, setFetchingOrder] = useState(true)
+  const [fetchingOrder, setFetchingOrder] = useState(false)
   const [saleId, setSaleId] = useState("")
   const [balanceAmount, setBalanceAmount] = useState("")
   const [balanceTenderType, setBalanceTenderType] = useState("")

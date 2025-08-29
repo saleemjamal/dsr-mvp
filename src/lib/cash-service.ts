@@ -62,7 +62,6 @@ export async function submitCashCount(cashCount: CashCount) {
     .from('cash_counts')
     .insert([cashCount])
     .select()
-    .limit(1)
 
   if (error) throw error
   
@@ -93,7 +92,6 @@ export async function getLatestCashCount(storeId: string, countType: 'sales_draw
     .eq('count_type', countType)
     .order('count_date', { ascending: false })
     .order('counted_at', { ascending: false })
-    .limit(1)
 
   if (error && error.code !== 'PGRST116') throw error // PGRST116 = no rows returned
   
@@ -113,7 +111,6 @@ export async function createTransferRequest(transfer: Omit<CashTransfer, 'id'>) 
     .from('cash_transfers')
     .insert([transfer])
     .select()
-    .limit(1)
 
   if (error) throw error
   
@@ -207,7 +204,6 @@ export async function getCurrentCashBalance(storeId: string, date: string = new 
     .select('*')
     .eq('store_id', storeId)
     .eq('balance_date', date)
-    .limit(1)
 
   if (error && error.code !== 'PGRST116') throw error
   
@@ -226,7 +222,6 @@ export async function updateCashBalance(balance: Partial<CashBalance> & { store_
       ignoreDuplicates: false 
     })
     .select()
-    .limit(1)
 
   if (error) throw error
   
@@ -354,7 +349,6 @@ async function calculatePettyCashExpected(storeId: string, fromTime: string, toT
       .eq('count_type', 'petty_cash')
       .lt('counted_at', fromTime)
       .order('counted_at', { ascending: false })
-      .limit(1)
 
     let openingBalance = lastCount?.[0]?.total_counted || 0
 
@@ -432,7 +426,6 @@ export async function getDefaultStore() {
     .from('stores')
     .select('*')
     .eq('is_active', true)
-    .limit(1)
 
   if (error && error.code !== 'PGRST116') throw error
   

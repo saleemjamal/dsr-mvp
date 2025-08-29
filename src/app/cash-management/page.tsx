@@ -1,5 +1,7 @@
 "use client"
 
+export const dynamic = 'force-dynamic'
+
 import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
@@ -11,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Calculator, IndianRupee, TrendingUp, TrendingDown, Clock, CheckCircle, AlertTriangle, Plus, ArrowRight, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { format } from "date-fns"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 import { useStore } from "@/contexts/store-context"
 import { calculateExpectedCashAmount, getCashSummary, getLatestCashCount } from "@/lib/cash-service"
 import { toast } from "sonner"

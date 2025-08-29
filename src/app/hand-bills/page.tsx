@@ -1,5 +1,7 @@
 "use client"
 
+export const dynamic = 'force-dynamic'
+
 import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
@@ -16,7 +18,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { FileText, Plus, Search, Calendar, IndianRupee, Camera, CheckCircle, AlertTriangle, Clock, Loader2, ExternalLink, Image, Eye, Edit } from "lucide-react"
 import Link from "next/link"
 import { format } from "date-fns"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 import { useStore } from "@/contexts/store-context"
 import { getHandBillsForDateRange, updateHandBill, type HandBillSummary } from "@/lib/hand-bills-service"
 import { canEditTransaction } from "@/lib/reconciliation-service"

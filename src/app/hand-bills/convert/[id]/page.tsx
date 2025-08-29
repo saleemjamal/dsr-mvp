@@ -16,7 +16,7 @@ import Link from "next/link"
 import { getHandBillById, convertHandBillToSale, type HandBill } from "@/lib/hand-bills-service"
 import { getStoreById } from "@/lib/store-service"
 import { canEditTransaction } from "@/lib/reconciliation-service"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 
 // Mock data no longer needed - will fetch real data
 const getTenderTypeBadge = (tenderType: string) => {
@@ -40,7 +40,7 @@ export default function ConvertHandBillPage() {
   const params = useParams()
   const { profile } = useAuth()
   const [loading, setLoading] = useState(false)
-  const [fetchingBill, setFetchingBill] = useState(true)
+  const [fetchingBill, setFetchingBill] = useState(false)
   const [saleId, setSaleId] = useState("")
   const [handBill, setHandBill] = useState<HandBill | null>(null)
   const [storeName, setStoreName] = useState<string>("")

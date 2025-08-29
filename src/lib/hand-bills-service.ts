@@ -45,7 +45,6 @@ export async function createHandBill(handBill: Omit<HandBill, 'id' | 'created_at
       status: handBill.status || 'pending'
     }])
     .select()
-    .limit(1)
 
   if (error) {
     console.error('Error creating hand bill:', error)
@@ -102,18 +101,13 @@ export async function getHandBillById(id: string): Promise<HandBill | null> {
     .from('hand_bills')
     .select('*')
     .eq('id', id)
-    .limit(1)
 
   if (error) {
     console.error('Error fetching hand bill:', error)
     return null
   }
   
-  if (!data || data.length === 0) {
-    return null
-  }
-  
-  return data[0] as HandBill
+  return data && data.length > 0 ? data[0] as HandBill : null
 }
 
 export async function getPendingHandBills(storeId?: string): Promise<HandBillSummary[]> {
@@ -226,43 +220,38 @@ export async function updateHandBillStatus(id: string, status: HandBill['status'
   const updateData: any = { status }
   if (notes) updateData.notes = notes
 
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('hand_bills')
     .update(updateData)
     .eq('id', id)
-    .select()
-    .limit(1)
 
   if (error) {
     console.error('Error updating hand bill status:', error)
     throw new Error(error.message)
   }
   
-  if (!data || data.length === 0) {
-    throw new Error('Failed to update hand bill status - no data returned')
+  return {
+    id,
+    status,
+    ...(notes && { notes })
   }
-  
-  return data[0]
 }
 
 export async function updateHandBill(id: string, updates: Partial<HandBill>) {
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('hand_bills')
     .update(updates)
     .eq('id', id)
-    .select()
-    .limit(1)
 
   if (error) {
     console.error('Error updating hand bill:', error)
     throw new Error(error.message)
   }
   
-  if (!data || data.length === 0) {
-    throw new Error('Failed to update hand bill - no data returned')
+  return {
+    id,
+    ...updates
   }
-  
-  return data[0]
 }
 
 export async function deleteHandBill(id: string) {

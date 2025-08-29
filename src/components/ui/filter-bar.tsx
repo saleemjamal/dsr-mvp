@@ -22,7 +22,7 @@ import { Label } from "@/components/ui/label"
 import { Building, Calendar as CalendarIcon, Filter, X } from "lucide-react"
 import { format, subDays, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek } from "date-fns"
 import { cn } from "@/lib/utils"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 import { useStore } from "@/contexts/store-context"
 import { UserRole } from "@/lib/permissions"
 

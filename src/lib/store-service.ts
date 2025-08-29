@@ -60,7 +60,6 @@ export async function getStoreById(storeId: string): Promise<Store | null> {
     .from('stores')
     .select('*')
     .eq('id', storeId)
-    .limit(1)
 
   if (error) {
     console.error('Error fetching store by ID:', error)
@@ -75,7 +74,6 @@ export async function getStoreByCode(storeCode: string): Promise<Store | null> {
     .from('stores')
     .select('*')
     .eq('store_code', storeCode)
-    .limit(1)
 
   if (error) {
     console.error('Error fetching store:', error)
@@ -130,7 +128,6 @@ export async function deleteStore(id: string) {
     .from('user_profiles')
     .select('id')
     .eq('default_store_id', id)
-    .limit(1)
 
   if (users && users.length > 0) {
     throw new Error('Cannot delete store with assigned users. Please reassign users first.')
@@ -153,7 +150,6 @@ export async function toggleStoreStatus(id: string): Promise<Store> {
     .from('stores')
     .select('is_active')
     .eq('id', id)
-    .limit(1)
 
   if (!storeData || storeData.length === 0) {
     throw new Error('Store not found')
@@ -252,7 +248,6 @@ export async function getUserAccessibleStores(userId: string): Promise<Store[]> 
     .select('role, default_store_id, is_active')
     .eq('id', userId)
     .eq('is_active', true)
-    .limit(1)
 
   if (!profileData || profileData.length === 0) {
     return []
@@ -272,13 +267,8 @@ export async function getUserAccessibleStores(userId: string): Promise<Store[]> 
       .select('*')
       .eq('id', profile.default_store_id)
       .eq('is_active', true)
-      .limit(1)
 
-    if (!storeData || storeData.length === 0) {
-      return []
-    }
-    
-    return [storeData[0] as Store]
+    return storeData && storeData.length > 0 ? [storeData[0] as Store] : []
   }
 
   return []

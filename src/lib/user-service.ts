@@ -47,13 +47,11 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     .from('user_profiles')
     .select('*')
     .eq('id', userId)
-    .limit(1)
+
+  console.log('getUserProfile query result:', { data, error })
 
   if (error) {
     console.error('Error fetching user profile:', error)
-    console.error('Error code:', error.code)
-    console.error('Error details:', error.details)
-    console.error('Error message:', error.message)
     return null
   }
   
@@ -152,7 +150,6 @@ export async function grantStoreAccess(
       granted_by: grantedBy
     }])
     .select()
-    .limit(1)
 
   if (error) {
     console.error('Error granting store access:', error)
@@ -185,7 +182,6 @@ export async function hasStoreAccess(userId: string, storeId: string, permission
     .select('can_view, can_edit, can_approve')
     .eq('user_id', userId)
     .eq('store_id', storeId)
-    .limit(1)
 
   if (error || !accessData || accessData.length === 0) {
     return false
@@ -217,7 +213,6 @@ export async function createUserSession(session: Omit<UserSession, 'id' | 'sessi
       is_active: true
     }])
     .select()
-    .limit(1)
 
   if (error) {
     console.error('Error creating user session:', error)

@@ -4,7 +4,9 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { useAuth } from "@/contexts/auth-context"
+import { useState, useEffect } from "react"
+import { supabase } from "@/lib/supabase"
+import { UserProfile } from "@/lib/user-service"
 import { UserRole, Permission, hasPermission } from "@/lib/permissions"
 import { 
   Home, 
@@ -36,7 +38,7 @@ interface NavigationItem {
 const navigation: NavigationItem[] = [
   {
     name: "Dashboard",
-    href: "/",
+    href: "/dashboard",
     icon: Home,
   },
   {
@@ -136,7 +138,24 @@ const getFilteredNavigation = (userRole: UserRole | string) => {
 
 export function Sidebar() {
   const pathname = usePathname()
-  const { profile } = useAuth()
+  const [profile, setProfile] = useState<UserProfile | null>(null)
+
+  useEffect(() => {
+    // Get current user profile
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .then(({ data }) => {
+            if (data && data.length > 0) {
+              setProfile(data[0] as UserProfile)
+            }
+          })
+      }
+    })
+  }, [])
 
   // Get navigation items based on user role
   const userNavigation = profile ? getFilteredNavigation(profile.role) : []
@@ -144,7 +163,7 @@ export function Sidebar() {
   return (
     <div className="flex h-full max-h-screen flex-col gap-2">
       <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
-        <Link href="/" className="flex items-center gap-2 font-semibold">
+        <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
           <Menu className="h-6 w-6" />
           <span className="">DSR System</span>
         </Link>

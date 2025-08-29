@@ -1,5 +1,7 @@
 "use client"
 
+export const dynamic = 'force-dynamic'
+
 import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
@@ -13,7 +15,7 @@ import { Label } from "@/components/ui/label"
 import { Users, Plus, Search, Edit, Phone, Mail, Calendar, ShoppingBag, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { getAllCustomers, createCustomer, updateCustomer, type Customer } from "@/lib/customer-service"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 
 export default function CustomersPage() {
   const { profile } = useAuth()
@@ -22,7 +24,7 @@ export default function CustomersPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
   const [loading, setLoading] = useState(false)
-  const [initialLoading, setInitialLoading] = useState(true)
+  const [initialLoading, setInitialLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     phone: '',

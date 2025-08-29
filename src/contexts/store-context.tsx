@@ -1,8 +1,9 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { useAuth } from './auth-context'
 import { getUserAccessibleStores, type Store } from '@/lib/store-service'
+import { getUserProfile, type UserProfile } from '@/lib/user-service'
+import { supabase } from '@/lib/supabase'
 import { UserRole } from '@/lib/permissions'
 
 interface StoreContextType {
@@ -22,14 +23,26 @@ interface StoreProviderProps {
 }
 
 export function StoreProvider({ children }: StoreProviderProps) {
-  const { profile } = useAuth()
+  const [profile, setProfile] = useState<UserProfile | null>(null)
   const [currentStore, setCurrentStore] = useState<Store | null>(null)
   const [accessibleStores, setAccessibleStores] = useState<Store[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [isAllStoresSelected, setIsAllStoresSelected] = useState(false)
 
   // Check if user can access multiple stores
   const canAccessMultipleStores = profile?.role === UserRole.SUPER_USER || profile?.role === UserRole.ACCOUNTS_INCHARGE
+
+  useEffect(() => {
+    // Get current user profile
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session) {
+        const userProfile = await getUserProfile(session.user.id)
+        if (userProfile) {
+          setProfile(userProfile)
+        }
+      }
+    })
+  }, [])
 
   useEffect(() => {
     if (!profile?.id) {
@@ -46,6 +59,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
     try {
       setLoading(true)
       const stores = await getUserAccessibleStores(profile.id)
+      
       setAccessibleStores(stores)
 
       // Set current store and initial selection mode

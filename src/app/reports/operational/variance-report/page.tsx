@@ -13,7 +13,7 @@ import Link from "next/link"
 import { format } from "date-fns"
 import { PermissionGuard } from "@/components/auth/PermissionGuard"
 import { Permission } from "@/lib/permissions"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 import { useStore } from "@/contexts/store-context"
 import { calculateExpectedCashAmount, getLatestCashCount } from "@/lib/cash-service"
 import { toast } from "sonner"
@@ -51,7 +51,7 @@ interface VarianceReportSummary {
 export default function VarianceReportPage() {
   const { profile } = useAuth()
   const { accessibleStores } = useStore()
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [filters, setFilters] = useState<FilterState | null>(null)
   const [varianceData, setVarianceData] = useState<CashVarianceData[]>([])
   const [summary, setSummary] = useState<VarianceReportSummary>({

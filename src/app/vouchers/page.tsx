@@ -1,5 +1,7 @@
 "use client"
 
+export const dynamic = 'force-dynamic'
+
 import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
@@ -16,7 +18,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Gift, Plus, Search, AlertTriangle, Calendar, IndianRupee, Loader2, Eye, Edit } from "lucide-react"
 import Link from "next/link"
 import { format } from "date-fns"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 import { useStore } from "@/contexts/store-context"
 import { getVouchersForDateRange, updateVoucher, type GiftVoucherSummary } from "@/lib/gift-vouchers-service"
 import { canEditTransaction } from "@/lib/reconciliation-service"

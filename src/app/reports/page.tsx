@@ -1,5 +1,7 @@
 "use client"
 
+export const dynamic = 'force-dynamic'
+
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,7 +11,7 @@ import { BarChart3, FileText, TrendingUp, Calculator, Building, Zap, Download, E
 import Link from "next/link"
 import { PermissionGuard } from "@/components/auth/PermissionGuard"
 import { Permission } from "@/lib/permissions"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 
 const reportCategories = [
   {

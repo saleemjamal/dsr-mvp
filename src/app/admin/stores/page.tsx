@@ -1,5 +1,7 @@
 "use client"
 
+export const dynamic = 'force-dynamic'
+
 import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
@@ -39,7 +41,7 @@ export default function StoreManagementPage() {
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false)
   const [editingStore, setEditingStore] = useState<StoreWithStats | null>(null)
   const [selectedStore, setSelectedStore] = useState<StoreWithStats | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [formLoading, setFormLoading] = useState(false)
   const [formData, setFormData] = useState({
     store_code: '',

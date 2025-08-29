@@ -35,7 +35,7 @@ export default function NewExpensePage() {
   const [loading, setLoading] = useState(false)
   const [stores, setStores] = useState<Store[]>([])
   const [categories, setCategories] = useState<ExpenseCategory[]>([])
-  const [loadingData, setLoadingData] = useState(true)
+  const [loadingData, setLoadingData] = useState(false)
   const [showCamera, setShowCamera] = useState(false)
   const [cameraRowId, setCameraRowId] = useState<string>("")
   const [storeId, setStoreId] = useState("")

@@ -13,14 +13,14 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { CheckCircle, XCircle, Clock, ArrowRight, IndianRupee, User, Calendar, Loader2, Edit } from "lucide-react"
 import { toast } from "sonner"
 import { getPendingApprovals, approveTransfer, rejectTransfer, type CashTransfer } from "@/lib/cash-service"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 
 export default function ApprovalsPage() {
   const { profile } = useAuth()
   const [transfers, setTransfers] = useState<CashTransfer[]>([])
   const [selectedTransfer, setSelectedTransfer] = useState<CashTransfer | null>(null)
   const [loading, setLoading] = useState("")
-  const [initialLoading, setInitialLoading] = useState(true)
+  const [initialLoading, setInitialLoading] = useState(false)
   const [approvalData, setApprovalData] = useState({
     approvedAmount: '',
     notes: ''

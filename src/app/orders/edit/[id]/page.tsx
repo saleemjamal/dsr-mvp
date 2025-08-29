@@ -17,7 +17,7 @@ import Link from "next/link"
 import { getSalesOrderById, updateSalesOrder, type SalesOrder } from "@/lib/sales-orders-service"
 import { useStore } from "@/contexts/store-context"
 import { canEditTransaction } from "@/lib/reconciliation-service"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 
 export default function EditOrderPage() {
   const router = useRouter()
@@ -26,7 +26,7 @@ export default function EditOrderPage() {
   const { accessibleStores, canAccessMultipleStores } = useStore()
   const { profile } = useAuth()
   const [loading, setLoading] = useState(false)
-  const [pageLoading, setPageLoading] = useState(true)
+  const [pageLoading, setPageLoading] = useState(false)
   const [order, setOrder] = useState<SalesOrder | null>(null)
   const [formData, setFormData] = useState({
     order_number: '',

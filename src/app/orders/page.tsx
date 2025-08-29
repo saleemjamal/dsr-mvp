@@ -1,5 +1,7 @@
 "use client"
 
+export const dynamic = 'force-dynamic'
+
 import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
@@ -13,7 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { ShoppingCart, Plus, Search, Calendar, IndianRupee, User, Package, Truck, Loader2, Eye, Edit, CheckCircle } from "lucide-react"
 import Link from "next/link"
 import { format } from "date-fns"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 import { useStore } from "@/contexts/store-context"
 import { getSalesOrdersForDateRange, type SalesOrderSummary } from "@/lib/sales-orders-service"
 import { canEditTransaction } from "@/lib/reconciliation-service"

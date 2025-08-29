@@ -39,7 +39,6 @@ export async function createReturn(returnData: Omit<Return, 'id' | 'created_at' 
     .from('returns')
     .insert([returnData])
     .select()
-    .limit(1)
 
   if (error) {
     console.error('Error creating return:', error)
@@ -96,18 +95,13 @@ export async function getReturnById(id: string): Promise<Return | null> {
     .from('returns')
     .select('*')
     .eq('id', id)
-    .limit(1)
 
   if (error) {
     console.error('Error fetching return:', error)
     return null
   }
   
-  if (!data || data.length === 0) {
-    return null
-  }
-  
-  return data[0] as Return
+  return data && data.length > 0 ? data[0] as Return : null
 }
 
 // Get returns for a date range with optional store filtering

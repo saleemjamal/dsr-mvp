@@ -69,7 +69,6 @@ export async function createSalesOrder(order: Omit<SalesOrder, 'id' | 'created_a
     .from('sales_orders')
     .insert([orderData])
     .select()
-    .limit(1)
 
   if (error) {
     console.error('Error creating sales order:', error)
@@ -425,7 +424,6 @@ export async function generateOrderNumber(storeId: string): Promise<string> {
     .eq('store_id', storeId)
     .like('order_number', `SO${year}${month}%`)
     .order('created_at', { ascending: false })
-    .limit(1)
 
   if (error) {
     console.error('Error generating order number:', error)
@@ -434,7 +432,7 @@ export async function generateOrderNumber(storeId: string): Promise<string> {
   }
 
   let sequenceNumber = 1
-  if (data.length > 0 && data[0].order_number) {
+  if (data && data.length > 0 && data[0].order_number) {
     const lastOrderNumber = data[0].order_number
     const lastSequence = parseInt(lastOrderNumber.slice(-3))
     if (!isNaN(lastSequence)) {

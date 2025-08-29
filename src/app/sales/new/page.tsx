@@ -14,7 +14,7 @@ import { ArrowLeft, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import { createMultipleSales } from "@/lib/sales-service"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 import { useStore } from "@/contexts/store-context"
 import type { Store } from "@/lib/store-service"
 

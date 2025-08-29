@@ -1,27 +1,48 @@
 "use client"
 
-import { Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
-import { useAuth } from '@/contexts/auth-context'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { signInWithGoogle, checkAuth } from '@/lib/auth-helpers'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Building2 } from 'lucide-react'
 import { toast } from 'sonner'
 
-function LoginContent() {
+export default function LoginPage() {
+  const router = useRouter()
   const searchParams = useSearchParams()
-  const { signInWithGoogle, loading } = useAuth()
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    // Check if already authenticated
+    checkAuth().then(({ user }) => {
+      if (user) {
+        router.push('/dashboard')
+      }
+    })
+
+    // Check for error messages
+    const error = searchParams?.get('error')
+    if (error === 'user_not_found') {
+      toast.error('Your account is not authorized. Please contact an administrator.')
+    } else if (error === 'inactive_user') {
+      toast.error('Your account has been deactivated. Please contact an administrator.')
+    }
+  }, [router, searchParams])
 
   const handleGoogleSignIn = async () => {
     try {
+      setLoading(true)
       const { error } = await signInWithGoogle()
       
       if (error) {
         toast.error('Google sign-in failed: ' + error.message)
+        setLoading(false)
       }
       // OAuth flow will handle redirect automatically
     } catch (err) {
       toast.error('Google sign-in failed')
+      setLoading(false)
     }
   }
 
@@ -91,24 +112,5 @@ function LoginContent() {
         </div>
       </div>
     </div>
-  )
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <Card className="mx-auto max-w-sm">
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-              <p className="mt-2 text-muted-foreground">Loading...</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    }>
-      <LoginContent />
-    </Suspense>
   )
 }

@@ -1,5 +1,7 @@
 "use client"
 
+export const dynamic = 'force-dynamic'
+
 import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
@@ -16,7 +18,7 @@ import { TenderTypeSelect } from "@/components/ui/tender-type-select"
 import { Plus, Loader2, Eye, Edit, CheckCircle, IndianRupee } from "lucide-react"
 import Link from "next/link"
 import { format } from "date-fns"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 import { useStore } from "@/contexts/store-context"
 import { getSalesForUser, getSalesForDateRange, updateSale } from "@/lib/sales-service"
 import { canEditTransaction } from "@/lib/reconciliation-service"

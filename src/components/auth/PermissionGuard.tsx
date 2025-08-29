@@ -1,5 +1,5 @@
 import { ReactNode } from 'react'
-import { useAuth } from '@/contexts/auth-context'
+import { useAuth } from '@/hooks/use-auth'
 import { hasPermission, hasAnyPermission, Permission, UserRole } from '@/lib/permissions'
 
 interface PermissionGuardProps {

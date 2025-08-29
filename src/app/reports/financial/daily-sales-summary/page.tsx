@@ -13,7 +13,7 @@ import Link from "next/link"
 import { format } from "date-fns"
 import { PermissionGuard } from "@/components/auth/PermissionGuard"
 import { Permission } from "@/lib/permissions"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/hooks/use-auth"
 import { useStore } from "@/contexts/store-context"
 import { getDashboardData } from "@/lib/dashboard-service"
 import { getSalesForDateRange } from "@/lib/sales-service"
@@ -46,7 +46,7 @@ const paymentMethodIcons = {
 export default function DailySalesSummaryPage() {
   const { profile } = useAuth()
   const { accessibleStores } = useStore()
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [filters, setFilters] = useState<FilterState | null>(null)
   const [salesData, setSalesData] = useState<SalesSummaryData>({
     totalSales: 0,

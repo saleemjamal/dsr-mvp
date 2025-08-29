@@ -9,7 +9,10 @@ import { Menu, User, LogOut, Settings as SettingsIcon } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { useAuth } from "@/contexts/auth-context"
+import { useState, useEffect, useRef } from "react"
+import { supabase } from "@/lib/supabase"
+import { signOut } from "@/lib/auth-helpers"
+import { UserProfile } from "@/lib/user-service"
 import { 
   Home, 
   ShoppingCart, 
@@ -35,7 +38,7 @@ interface NavigationItem {
 const navigation: NavigationItem[] = [
   {
     name: "Dashboard",
-    href: "/",
+    href: "/dashboard",
     icon: Home,
   },
   {
@@ -99,10 +102,52 @@ const getFilteredNavigation = (userRole: UserRole | string) => {
 
 export function Header() {
   const pathname = usePathname()
-  const { user, profile, signOut } = useAuth()
+  const [user, setUser] = useState<any>(null)
+  const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [mounted, setMounted] = useState(false)
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    setMounted(true)
+    // Get current user
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setUser(session.user)
+        // Get profile by user ID
+        supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .then(({ data }) => {
+            if (data && data.length > 0) {
+              setProfile(data[0] as UserProfile)
+            }
+          })
+      }
+    })
+  }, [])
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false)
+      }
+    }
+
+    if (dropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [dropdownOpen])
 
   const handleSignOut = async () => {
     try {
+      console.log('Sign out clicked')
       await signOut()
     } catch (error) {
       console.error('Error signing out:', error)
@@ -170,56 +215,63 @@ export function Header() {
 
       {/* User menu and theme toggle */}
       <div className="flex items-center gap-2">
-        <ThemeToggle />
-        
-        {user && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+        {mounted && (
+          <>
+            <ThemeToggle />
+            
+            <div className="relative" ref={dropdownRef}>
+              <Button 
+                variant="ghost" 
+                className="relative h-8 w-8 rounded-full"
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+              >
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src={user.user_metadata?.avatar_url} alt={profile?.full_name || user.email || ''} />
+                  <AvatarImage src={user?.user_metadata?.avatar_url} alt={profile?.full_name || user?.email || ''} />
                   <AvatarFallback>
-                    {getUserInitials(profile?.full_name, user.email)}
+                    {getUserInitials(profile?.full_name, user?.email)}
                   </AvatarFallback>
                 </Avatar>
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align="end" forceMount>
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">
-                    {profile?.full_name || 'User'}
-                  </p>
-                  <p className="text-xs leading-none text-muted-foreground">
-                    {user.email}
-                  </p>
-                  {profile?.role && (
-                    <p className="text-xs leading-none text-muted-foreground capitalize">
-                      Role: {profile.role}
-                    </p>
-                  )}
+              
+              {dropdownOpen && (
+                <div className="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 z-50">
+                  <div className="px-4 py-3 border-b dark:border-gray-700">
+                    <p className="text-sm font-medium">{profile?.full_name || 'User'}</p>
+                    <p className="text-xs text-muted-foreground">{user?.email || 'Loading...'}</p>
+                    {profile?.role && (
+                      <p className="text-xs text-muted-foreground capitalize">Role: {profile.role}</p>
+                    )}
+                  </div>
+                  <div className="py-1">
+                    <Link 
+                      href="/profile" 
+                      className="flex items-center px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
+                      onClick={() => setDropdownOpen(false)}
+                    >
+                      <User className="mr-2 h-4 w-4" />
+                      Profile
+                    </Link>
+                    <Link 
+                      href="/settings" 
+                      className="flex items-center px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
+                      onClick={() => setDropdownOpen(false)}
+                    >
+                      <SettingsIcon className="mr-2 h-4 w-4" />
+                      Settings
+                    </Link>
+                    <hr className="my-1 dark:border-gray-700" />
+                    <button 
+                      onClick={handleSignOut} 
+                      className="flex items-center w-full px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-left"
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Log out
+                    </button>
+                  </div>
                 </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link href="/profile" className="cursor-pointer">
-                  <User className="mr-2 h-4 w-4" />
-                  <span>Profile</span>
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/settings" className="cursor-pointer">
-                  <SettingsIcon className="mr-2 h-4 w-4" />
-                  <span>Settings</span>
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>Log out</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+              )}
+            </div>
+          </>
         )}
       </div>
     </header>
