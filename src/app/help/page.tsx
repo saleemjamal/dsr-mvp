@@ -42,10 +42,12 @@ export default function HelpPage() {
   const [activeSection, setActiveSection] = useState("overview")
 
   // Determine which help content to show based on role
-  const getHelpComponent = () => {
+  const getHelpComponent = (roleOverride?: UserRole) => {
     if (!profile) return null
 
-    switch (profile.role) {
+    const targetRole = roleOverride || profile.role
+
+    switch (targetRole) {
       case UserRole.SUPER_USER:
         return <SuperUserHelp searchQuery={searchQuery} activeSection={activeSection} />
       case UserRole.ACCOUNTS_INCHARGE:
@@ -189,11 +191,39 @@ export default function HelpPage() {
           )}
 
           {/* Main Help Content */}
-          <Card>
-            <CardContent className="pt-6">
-              {getHelpComponent()}
-            </CardContent>
-          </Card>
+          {profile?.role === UserRole.SUPER_USER ? (
+            <Tabs defaultValue="super_user" className="space-y-4">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="super_user">Super User</TabsTrigger>
+                <TabsTrigger value="accounts_incharge">AIC</TabsTrigger>
+                <TabsTrigger value="store_manager">Store Manager</TabsTrigger>
+                <TabsTrigger value="cashier">Cashier</TabsTrigger>
+              </TabsList>
+              
+              <Card>
+                <CardContent className="pt-6">
+                  <TabsContent value="super_user" className="mt-0">
+                    {getHelpComponent(UserRole.SUPER_USER)}
+                  </TabsContent>
+                  <TabsContent value="accounts_incharge" className="mt-0">
+                    {getHelpComponent(UserRole.ACCOUNTS_INCHARGE)}
+                  </TabsContent>
+                  <TabsContent value="store_manager" className="mt-0">
+                    {getHelpComponent(UserRole.STORE_MANAGER)}
+                  </TabsContent>
+                  <TabsContent value="cashier" className="mt-0">
+                    {getHelpComponent(UserRole.CASHIER)}
+                  </TabsContent>
+                </CardContent>
+              </Card>
+            </Tabs>
+          ) : (
+            <Card>
+              <CardContent className="pt-6">
+                {getHelpComponent()}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Footer */}
           <div className="mt-8 text-center text-sm text-muted-foreground print:hidden">

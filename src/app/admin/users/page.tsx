@@ -123,6 +123,13 @@ export default function UserManagementPage() {
       return
     }
 
+    // Validate store assignment for Store Managers and Cashiers
+    if ((newWhitelistRole === UserRole.STORE_MANAGER || newWhitelistRole === UserRole.CASHIER) && 
+        newWhitelistStores.length === 0) {
+      toast.error(`${getRoleDisplayName(newWhitelistRole)}s must be assigned to at least one store`)
+      return
+    }
+
     try {
       const insertData: any = type === 'email' 
         ? { email: value.trim().toLowerCase() }
@@ -130,7 +137,10 @@ export default function UserManagementPage() {
       
       // Add role and store assignments
       insertData.assigned_role = newWhitelistRole
-      insertData.assigned_store_ids = newWhitelistStores
+      // Only include store assignments for Store Managers and Cashiers
+      insertData.assigned_store_ids = (newWhitelistRole === UserRole.SUPER_USER || newWhitelistRole === UserRole.ACCOUNTS_INCHARGE) 
+        ? [] 
+        : newWhitelistStores
       insertData.notes = newWhitelistNotes.trim()
       insertData.added_by = profile?.id
 
@@ -497,7 +507,16 @@ export default function UserManagementPage() {
                             {/* Role Selection */}
                             <div>
                               <Label htmlFor="role">Assigned Role *</Label>
-                              <Select value={newWhitelistRole} onValueChange={(value) => setNewWhitelistRole(value as UserRole)}>
+                              <Select 
+                                value={newWhitelistRole} 
+                                onValueChange={(value) => {
+                                  setNewWhitelistRole(value as UserRole)
+                                  // Clear store selection when switching to SU or AIC
+                                  if (value === UserRole.SUPER_USER || value === UserRole.ACCOUNTS_INCHARGE) {
+                                    setNewWhitelistStores([])
+                                  }
+                                }}
+                              >
                                 <SelectTrigger id="role">
                                   <SelectValue placeholder="Select a role" />
                                 </SelectTrigger>
@@ -515,35 +534,49 @@ export default function UserManagementPage() {
                               </p>
                             </div>
 
-                            {/* Store Selection */}
-                            <div>
-                              <Label htmlFor="stores">Assigned Stores</Label>
-                              <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-2">
-                                {stores.filter(s => s.is_active).map((store) => (
-                                  <div key={store.id} className="flex items-center space-x-2">
-                                    <input
-                                      type="checkbox"
-                                      id={`store-${store.id}`}
-                                      checked={newWhitelistStores.includes(store.id)}
-                                      onChange={(e) => {
-                                        if (e.target.checked) {
-                                          setNewWhitelistStores([...newWhitelistStores, store.id])
-                                        } else {
-                                          setNewWhitelistStores(newWhitelistStores.filter(id => id !== store.id))
-                                        }
-                                      }}
-                                      className="rounded border-gray-300"
-                                    />
-                                    <Label htmlFor={`store-${store.id}`} className="font-normal cursor-pointer">
-                                      {store.store_name} ({store.store_code})
-                                    </Label>
-                                  </div>
-                                ))}
+                            {/* Store Selection - Only for Store Managers and Cashiers */}
+                            {(newWhitelistRole === UserRole.STORE_MANAGER || newWhitelistRole === UserRole.CASHIER) ? (
+                              <div>
+                                <Label htmlFor="stores">Assigned Stores *</Label>
+                                <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-2">
+                                  {stores.filter(s => s.is_active).map((store) => (
+                                    <div key={store.id} className="flex items-center space-x-2">
+                                      <input
+                                        type="checkbox"
+                                        id={`store-${store.id}`}
+                                        checked={newWhitelistStores.includes(store.id)}
+                                        onChange={(e) => {
+                                          if (e.target.checked) {
+                                            setNewWhitelistStores([...newWhitelistStores, store.id])
+                                          } else {
+                                            setNewWhitelistStores(newWhitelistStores.filter(id => id !== store.id))
+                                          }
+                                        }}
+                                        className="rounded border-gray-300"
+                                      />
+                                      <Label htmlFor={`store-${store.id}`} className="font-normal cursor-pointer">
+                                        {store.store_name} ({store.store_code})
+                                      </Label>
+                                    </div>
+                                  ))}
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Store Managers and Cashiers must be assigned to at least one store
+                                </p>
                               </div>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Select stores the user will have access to
-                              </p>
-                            </div>
+                            ) : (
+                              <div className="p-4 bg-muted rounded-lg">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Shield className="h-4 w-4 text-primary" />
+                                  <span className="font-medium text-sm">Automatic Store Access</span>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  {newWhitelistRole === UserRole.SUPER_USER 
+                                    ? "Super Users automatically have access to all stores in the system"
+                                    : "Accounts Incharge automatically have access to all stores for financial oversight"}
+                                </p>
+                              </div>
+                            )}
 
                             {/* Notes */}
                             <div>
@@ -620,7 +653,12 @@ export default function UserManagementPage() {
                                 </Badge>
                               </TableCell>
                               <TableCell>
-                                {entry.assigned_store_ids && entry.assigned_store_ids.length > 0 ? (
+                                {(entry.assigned_role === UserRole.SUPER_USER || entry.assigned_role === UserRole.ACCOUNTS_INCHARGE) ? (
+                                  <Badge variant="default" className="bg-primary/10 text-primary">
+                                    <Building className="mr-1 h-3 w-3" />
+                                    All Stores
+                                  </Badge>
+                                ) : entry.assigned_store_ids && entry.assigned_store_ids.length > 0 ? (
                                   <div className="flex flex-wrap gap-1">
                                     {entry.assigned_store_ids.slice(0, 2).map((storeId) => {
                                       const store = stores.find(s => s.id === storeId)
@@ -637,7 +675,7 @@ export default function UserManagementPage() {
                                     )}
                                   </div>
                                 ) : (
-                                  <span className="text-muted-foreground text-sm">No stores</span>
+                                  <span className="text-muted-foreground text-sm">No stores assigned</span>
                                 )}
                               </TableCell>
                               <TableCell>

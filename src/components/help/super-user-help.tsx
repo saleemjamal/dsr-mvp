@@ -138,6 +138,118 @@ export function SuperUserHelp({ searchQuery, activeSection }: SuperUserHelpProps
       ]
     },
     {
+      id: "transactions",
+      title: "Transaction Types & Lifecycles",
+      icon: FileText,
+      content: [
+        {
+          title: "Sales Orders (SO) - Advance Bookings",
+          path: "Dashboard → Sales Orders",
+          steps: [
+            "Purpose: Customer orders with advance payment for future delivery",
+            "",
+            "Lifecycle:",
+            "1. Creation: Record customer details, items, total amount, delivery date",
+            "2. Advance Payment: Capture partial payment (cash/card/UPI)",
+            "3. Status Flow: Pending → Confirmed → Delivered",
+            "4. Completion: Collect balance payment on delivery",
+            "5. Conversion: Transforms into final sale transaction",
+            "",
+            "Key Features:",
+            "• Tracks outstanding balance",
+            "• Delivery schedule management",
+            "• Customer contact retention",
+            "• Partial payment tracking"
+          ]
+        },
+        {
+          title: "Hand Bills (HB) - Manual Receipts",
+          path: "Dashboard → Hand Bills",
+          steps: [
+            "Purpose: Capture handwritten bills/receipts into the system",
+            "",
+            "Lifecycle:",
+            "1. Creation: Enter bill details from physical receipt",
+            "2. Image Capture: Upload photo of handwritten bill",
+            "3. Payment Recording: Select tender type used",
+            "4. Status: Pending → Converted/Cancelled",
+            "5. Conversion: Can be converted to system sale later",
+            "",
+            "Key Features:",
+            "• Bridges manual and digital records",
+            "• Image storage for verification",
+            "• Prevents revenue leakage",
+            "• Audit trail for manual transactions"
+          ]
+        },
+        {
+          title: "Returns (RRN) - Return Receipt Notes",
+          path: "Dashboard → Returns",
+          steps: [
+            "Purpose: Process customer returns and refunds",
+            "",
+            "Lifecycle:",
+            "1. Initiation: Reference original bill number",
+            "2. Validation: Verify purchase and return eligibility",
+            "3. Refund Method: Cash/store credit/original payment",
+            "4. Approval: High-value returns need manager approval",
+            "5. Processing: Deduct from inventory, issue refund",
+            "",
+            "Key Features:",
+            "• Affects petty cash for cash refunds",
+            "• Return history tracking",
+            "• Manager approval workflow",
+            "• Original bill linkage"
+          ]
+        },
+        {
+          title: "Gift Vouchers (GV) - Prepaid Store Credit",
+          path: "Dashboard → Vouchers",
+          steps: [
+            "Purpose: Issue and redeem gift certificates",
+            "",
+            "Lifecycle:",
+            "1. Issuance: Customer purchases voucher (unique number generated)",
+            "2. Active State: Valid until expiry date",
+            "3. Redemption: Can be partial or full value",
+            "4. Balance Tracking: Updated after each use",
+            "5. Expiry: Automatic status change when expired",
+            "",
+            "Key Features:",
+            "• Acts as tender type for payments",
+            "• Balance tracking and history",
+            "• Expiry management",
+            "• Cross-store redemption (if configured)"
+          ]
+        },
+        {
+          title: "Transaction Management Best Practices",
+          path: "",
+          steps: [
+            "Common Workflow Elements:",
+            "• Reconciliation: All transactions start as 'pending' until AIC reconciles",
+            "• Audit Trail: Every transaction records who, when, and which store",
+            "• Cash Impact: SO advances and GV sales increase cash",
+            "• Returns Impact: Decrease petty cash when refunded in cash",
+            "• Reporting: All types feed into daily sales summary",
+            "• Tally Export: Automatic mapping to accounting entries",
+            "",
+            "Permission Structure:",
+            "• Cashiers: Can create all transaction types",
+            "• Store Managers: Can modify and approve",
+            "• AIC: Can reconcile and generate reports",
+            "• Super Users: Full access and override capabilities",
+            "",
+            "Daily Processing:",
+            "• Morning: Review pending transactions",
+            "• Throughout Day: Monitor real-time entries",
+            "• Evening: Ensure all hand bills are entered",
+            "• End of Day: Complete reconciliation"
+          ]
+        }
+      ]
+    },
+    {
       id: "user-mgmt",
       title: "User Management",
       icon: Users,
