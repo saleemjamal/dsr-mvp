@@ -5,7 +5,7 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Menu, User, LogOut, Settings as SettingsIcon } from "lucide-react"
+import { Menu, User, LogOut, Settings as SettingsIcon, HelpCircle } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -243,6 +243,14 @@ export function Header() {
                     )}
                   </div>
                   <div className="py-1">
+                    <Link 
+                      href="/help" 
+                      className="flex items-center px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
+                      onClick={() => setDropdownOpen(false)}
+                    >
+                      <HelpCircle className="mr-2 h-4 w-4" />
+                      Help & Documentation
+                    </Link>
                     <Link 
                       href="/profile" 
                       className="flex items-center px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"

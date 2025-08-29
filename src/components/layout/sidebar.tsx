@@ -24,7 +24,19 @@ import {
   CheckSquare,
   Building,
   DollarSign,
-  Search
+  Search,
+  ChevronDown,
+  ChevronRight,
+  ChevronLeft,
+  Banknote,
+  ArrowRightLeft,
+  TrendingUp,
+  FolderOpen,
+  UserCog,
+  MapPin,
+  Tags,
+  PanelLeftClose,
+  PanelLeft
 } from "lucide-react"
 
 interface NavigationItem {
@@ -33,112 +45,204 @@ interface NavigationItem {
   icon: any
   permission?: Permission
   roles?: UserRole[]
+  badge?: number
 }
 
-const navigation: NavigationItem[] = [
+interface NavigationGroup {
+  name: string
+  icon?: any
+  items: NavigationItem[]
+  permission?: Permission
+  roles?: UserRole[]
+  color?: string
+}
+
+// Grouped navigation structure
+const navigationGroups: NavigationGroup[] = [
   {
-    name: "Dashboard",
-    href: "/dashboard",
-    icon: Home,
+    name: "Daily Operations",
+    icon: TrendingUp,
+    color: "bg-blue-500",
+    items: [
+      {
+        name: "Sales",
+        href: "/sales",
+        icon: ShoppingCart,
+        permission: Permission.CREATE_SALE,
+      },
+      {
+        name: "Expenses",
+        href: "/expenses",
+        icon: Receipt,
+        permission: Permission.CREATE_EXPENSE,
+      },
+    ]
   },
   {
-    name: "Sales",
-    href: "/sales",
-    icon: ShoppingCart,
-    permission: Permission.CREATE_SALE,
-  },
-  {
-    name: "Sales Orders",
-    href: "/orders",
+    name: "Extended Operations",
     icon: Package,
-    permission: Permission.CREATE_SALE,
-  },
-  {
-    name: "Expenses",
-    href: "/expenses", 
-    icon: Receipt,
-    permission: Permission.CREATE_EXPENSE,
-  },
-  {
-    name: "Hand Bills",
-    href: "/hand-bills",
-    icon: FileText,
-    permission: Permission.CREATE_SALE,
-  },
-  {
-    name: "Gift Vouchers",
-    href: "/vouchers",
-    icon: Gift,
-    permission: Permission.CREATE_VOUCHER,
-  },
-  {
-    name: "Returns",
-    href: "/returns",
-    icon: RotateCcw,
-    permission: Permission.CREATE_SALE,
+    color: "bg-purple-500",
+    items: [
+      {
+        name: "Sales Orders",
+        href: "/orders",
+        icon: Package,
+        permission: Permission.CREATE_SALE,
+      },
+      {
+        name: "Gift Vouchers",
+        href: "/vouchers",
+        icon: Gift,
+        permission: Permission.CREATE_VOUCHER,
+      },
+      {
+        name: "Returns",
+        href: "/returns",
+        icon: RotateCcw,
+        permission: Permission.CREATE_SALE,
+      },
+      {
+        name: "Hand Bills",
+        href: "/hand-bills",
+        icon: FileText,
+        permission: Permission.CREATE_SALE,
+      },
+    ]
   },
   {
     name: "Cash Management",
-    href: "/cash-management",
-    icon: Calculator,
-    permission: Permission.COUNT_CASH,
+    icon: Banknote,
+    color: "bg-green-500",
+    items: [
+      {
+        name: "Cash Count",
+        href: "/cash-management/count",
+        icon: Calculator,
+        permission: Permission.COUNT_CASH,
+      },
+      {
+        name: "Cash Transfers",
+        href: "/cash-management/transfers",
+        icon: ArrowRightLeft,
+        permission: Permission.TRANSFER_CASH,
+      },
+      {
+        name: "Cash Position",
+        href: "/cash-management",
+        icon: DollarSign,
+        permission: Permission.VIEW_CASH_MANAGEMENT,
+      },
+      {
+        name: "Adjustments",
+        href: "/cash-management/adjustment",
+        icon: Calculator,
+        roles: [UserRole.SUPER_USER, UserRole.STORE_MANAGER],
+      },
+      {
+        name: "Audit Trail",
+        href: "/cash-management/audit",
+        icon: FileText,
+        roles: [UserRole.SUPER_USER, UserRole.ACCOUNTS_INCHARGE],
+      },
+    ]
   },
   {
-    name: "Approvals",
-    href: "/approvals",
+    name: "Review & Control",
     icon: CheckSquare,
-    roles: [UserRole.SUPER_USER, UserRole.ACCOUNTS_INCHARGE, UserRole.STORE_MANAGER],
+    color: "bg-orange-500",
+    items: [
+      {
+        name: "Approvals",
+        href: "/approvals",
+        icon: CheckSquare,
+        roles: [UserRole.SUPER_USER], // Only Super Users can approve cash transfers
+      },
+      {
+        name: "Reconciliation",
+        href: "/reconciliation",
+        icon: Search,
+        permission: Permission.VIEW_RECONCILIATION,
+      },
+      {
+        name: "Reports",
+        href: "/reports",
+        icon: BarChart3,
+        roles: [UserRole.SUPER_USER, UserRole.ACCOUNTS_INCHARGE, UserRole.STORE_MANAGER],
+      },
+    ]
   },
   {
-    name: "Reconciliation",
-    href: "/reconciliation",
-    icon: Search,
-    permission: Permission.VIEW_RECONCILIATION,
-  },
-  {
-    name: "Customers",
-    href: "/customers",
-    icon: Users,
-    permission: Permission.CREATE_CUSTOMER,
-  },
-  {
-    name: "Reports",
-    href: "/reports",
-    icon: BarChart3,
-    roles: [UserRole.SUPER_USER, UserRole.ACCOUNTS_INCHARGE, UserRole.STORE_MANAGER],
-  },
-  {
-    name: "Admin",
-    href: "/admin",
+    name: "System",
     icon: Settings,
-    roles: [UserRole.SUPER_USER, UserRole.STORE_MANAGER],
+    color: "bg-gray-500",
+    items: [
+      {
+        name: "Locations",
+        href: "/admin/stores",
+        icon: MapPin,
+        roles: [UserRole.SUPER_USER, UserRole.STORE_MANAGER],
+      },
+      {
+        name: "Users",
+        href: "/admin/users",
+        icon: UserCog,
+        roles: [UserRole.SUPER_USER, UserRole.STORE_MANAGER],
+      },
+      {
+        name: "Customers",
+        href: "/customers",
+        icon: Users,
+        permission: Permission.CREATE_CUSTOMER,
+      },
+      {
+        name: "Categories",
+        href: "/admin/expense-categories",
+        icon: Tags,
+        roles: [UserRole.SUPER_USER, UserRole.STORE_MANAGER],
+      },
+      {
+        name: "Admin Panel",
+        href: "/admin",
+        icon: Settings,
+        roles: [UserRole.SUPER_USER, UserRole.STORE_MANAGER],
+      },
+    ]
   },
 ]
 
-const getFilteredNavigation = (userRole: UserRole | string) => {
-  return navigation.filter(item => {
-    // If no restrictions, show to everyone
-    if (!item.permission && !item.roles) {
-      return true
-    }
-    
-    // Check role-based access
-    if (item.roles) {
-      return item.roles.includes(userRole as UserRole)
-    }
-    
-    // Check permission-based access
-    if (item.permission) {
-      return hasPermission(userRole, item.permission)
-    }
-    
-    return false
-  })
+// Helper function to filter items based on permissions
+const filterNavigationItem = (item: NavigationItem, userRole: UserRole | string) => {
+  // If no restrictions, show to everyone
+  if (!item.permission && !item.roles) {
+    return true
+  }
+  
+  // Check role-based access
+  if (item.roles) {
+    return item.roles.includes(userRole as UserRole)
+  }
+  
+  // Check permission-based access
+  if (item.permission) {
+    return hasPermission(userRole, item.permission)
+  }
+  
+  return false
+}
+
+// Helper function to get filtered groups
+const getFilteredGroups = (userRole: UserRole | string) => {
+  return navigationGroups.map(group => ({
+    ...group,
+    items: group.items.filter(item => filterNavigationItem(item, userRole))
+  })).filter(group => group.items.length > 0) // Only show groups with visible items
 }
 
 export function Sidebar() {
   const pathname = usePathname()
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const [isCollapsed, setIsCollapsed] = useState(false)
 
   useEffect(() => {
     // Get current user profile
@@ -155,38 +259,233 @@ export function Sidebar() {
           })
       }
     })
+    
+    // Load saved expanded state from localStorage
+    const saved = localStorage.getItem('sidebar-expanded-groups')
+    if (saved) {
+      setExpandedGroups(new Set(JSON.parse(saved)))
+    } else {
+      // Default: expand Daily Operations
+      setExpandedGroups(new Set(['Daily Operations']))
+    }
+    
+    // Load saved collapsed state
+    const savedCollapsed = localStorage.getItem('sidebar-collapsed')
+    if (savedCollapsed === 'true') {
+      setIsCollapsed(true)
+    }
   }, [])
 
-  // Get navigation items based on user role
-  const userNavigation = profile ? getFilteredNavigation(profile.role) : []
+  // Get filtered navigation groups based on user role
+  const userGroups = profile ? getFilteredGroups(profile.role) : []
+
+  // Toggle group expansion
+  const toggleGroup = (groupName: string) => {
+    if (isCollapsed) return // Don't expand groups when sidebar is collapsed
+    const newExpanded = new Set(expandedGroups)
+    if (newExpanded.has(groupName)) {
+      newExpanded.delete(groupName)
+    } else {
+      newExpanded.add(groupName)
+    }
+    setExpandedGroups(newExpanded)
+    localStorage.setItem('sidebar-expanded-groups', JSON.stringify(Array.from(newExpanded)))
+  }
+  
+  // Toggle sidebar collapse
+  const toggleSidebar = () => {
+    const newCollapsed = !isCollapsed
+    setIsCollapsed(newCollapsed)
+    localStorage.setItem('sidebar-collapsed', String(newCollapsed))
+  }
+
+  // Check if any item in a group is active
+  const isGroupActive = (group: NavigationGroup) => {
+    return group.items.some(item => pathname === item.href || pathname.startsWith(item.href + '/'))
+  }
 
   return (
-    <div className="flex h-full max-h-screen flex-col gap-2">
-      <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
-        <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
-          <Menu className="h-6 w-6" />
-          <span className="">DSR System</span>
-        </Link>
+    <div className={cn(
+      "flex h-full max-h-screen flex-col gap-2 transition-all duration-300 ease-in-out",
+      isCollapsed ? "w-20" : "w-64"
+    )}>
+      <div className="flex h-20 items-center border-b px-4">
+        <button 
+          onClick={toggleSidebar}
+          className="flex items-center justify-center w-full group"
+          title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          <div className={cn(
+            "relative p-3 rounded-lg bg-white dark:bg-gray-800 shadow-sm transition-all duration-300 hover:shadow-md",
+            isCollapsed ? "p-2" : "p-3"
+          )}>
+            <img 
+              src="/images/logo.png" 
+              alt="Company Logo"
+              className={cn(
+                "object-contain transition-all duration-300",
+                isCollapsed ? "h-8 w-8" : "h-12 w-auto max-w-[180px]"
+              )}
+              onError={(e) => {
+                // Fallback to text if image fails to load
+                e.currentTarget.parentElement!.style.display = 'none';
+                e.currentTarget.parentElement!.nextElementSibling?.classList.remove('hidden');
+              }}
+            />
+            {/* Collapse/Expand Icon Overlay */}
+            <div className={cn(
+              "absolute -right-2 -bottom-2 bg-primary text-primary-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200",
+              "shadow-sm"
+            )}>
+              {isCollapsed ? (
+                <PanelLeft className="h-3 w-3" />
+              ) : (
+                <PanelLeftClose className="h-3 w-3" />
+              )}
+            </div>
+          </div>
+          <span className={cn(
+            "hidden bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent font-bold text-xl",
+            "transition-all duration-300"
+          )}>
+            DSR System
+          </span>
+        </button>
       </div>
-      <div className="flex-1">
-        <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
-          {userNavigation.map((item) => {
-            const isActive = pathname === item.href
+      <div className="flex-1 overflow-y-auto">
+        <nav className="grid items-start px-2 text-sm font-medium lg:px-4 gap-1">
+          {/* Dashboard - Always visible */}
+          <Link
+            href="/dashboard"
+            className={cn(
+              "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary hover:bg-muted/50",
+              pathname === "/dashboard" && "bg-gradient-to-r from-blue-500/10 to-purple-500/10 text-primary border-l-4 border-blue-500",
+              isCollapsed && "justify-center px-2"
+            )}
+            title={isCollapsed ? "Dashboard" : undefined}
+          >
+            <Home className={cn("h-4 w-4", isCollapsed && "h-5 w-5")} />
+            {!isCollapsed && <span className="font-medium">Dashboard</span>}
+          </Link>
+
+          {/* Grouped Navigation */}
+          {userGroups.map((group) => {
+            const isExpanded = expandedGroups.has(group.name)
+            const hasActiveItem = isGroupActive(group)
+            
             return (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary",
-                  isActive && "bg-muted text-primary"
+              <div key={group.name} className="mt-2">
+                {/* Group Header */}
+                {!isCollapsed ? (
+                  <button
+                    onClick={() => toggleGroup(group.name)}
+                    className={cn(
+                      "w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition-all",
+                      "hover:bg-muted/50 hover:text-primary",
+                      hasActiveItem && "text-primary"
+                    )}
+                  >
+                    <div className={cn(
+                      "p-1 rounded transition-transform duration-200",
+                      isExpanded ? "rotate-0" : "-rotate-90"
+                    )}>
+                      <ChevronDown className="h-3 w-3" />
+                    </div>
+                    <div className={cn(
+                      "p-1.5 rounded-md",
+                      group.color || "bg-gray-500",
+                      "bg-opacity-20"
+                    )}>
+                      <group.icon className={cn(
+                        "h-3.5 w-3.5",
+                        group.color ? group.color.replace('bg-', 'text-') : "text-gray-500"
+                      )} />
+                    </div>
+                    <span className="flex-1">{group.name}</span>
+                    {hasActiveItem && (
+                      <div className={cn(
+                        "w-2 h-2 rounded-full",
+                        group.color || "bg-gray-500",
+                        "animate-pulse"
+                      )} />
+                    )}
+                  </button>
+                ) : (
+                  <div className="flex justify-center py-2">
+                    <div className={cn(
+                      "p-1.5 rounded-md",
+                      group.color || "bg-gray-500",
+                      "bg-opacity-20"
+                    )}>
+                      <group.icon className={cn(
+                        "h-4 w-4",
+                        group.color ? group.color.replace('bg-', 'text-') : "text-gray-500"
+                      )} />
+                    </div>
+                  </div>
                 )}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.name}
-              </Link>
+
+                {/* Group Items - Collapsible */}
+                <div className={cn(
+                  "space-y-1 overflow-hidden transition-all duration-300",
+                  !isCollapsed && "ml-4",
+                  !isCollapsed && isExpanded ? "max-h-96 opacity-100 mt-1" : 
+                  !isCollapsed && !isExpanded ? "max-h-0 opacity-0" :
+                  "max-h-96 opacity-100" // Always show items when collapsed
+                )}>
+                  {group.items.map((item) => {
+                    const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+                    return (
+                      <Link
+                        key={item.name}
+                        href={item.href}
+                        className={cn(
+                          "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all",
+                          "hover:text-primary hover:bg-muted/50",
+                          !isCollapsed && "hover:translate-x-1",
+                          isCollapsed && "justify-center px-2",
+                          isActive && cn(
+                            "bg-gradient-to-r text-primary font-medium",
+                            group.color ? 
+                              `${group.color.replace('bg-', 'from-')}/10 to-transparent border-l-4 ${group.color.replace('bg-', 'border-')}` : 
+                              "from-gray-500/10 to-transparent border-l-4 border-gray-500"
+                          )
+                        )}
+                        title={isCollapsed ? item.name : undefined}
+                      >
+                        <item.icon className={cn(
+                          isCollapsed ? "h-5 w-5" : "h-4 w-4",
+                          isActive && (group.color ? group.color.replace('bg-', 'text-') : "text-gray-500")
+                        )} />
+                        {!isCollapsed && (
+                          <>
+                            <span>{item.name}</span>
+                            {item.badge && (
+                              <span className="ml-auto rounded-full bg-red-500 px-2 py-0.5 text-xs text-white">
+                                {item.badge}
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
             )
           })}
         </nav>
+      </div>
+      
+      {/* Footer */}
+      <div className="border-t p-4">
+        <div className={cn(
+          "flex items-center gap-2 text-xs text-muted-foreground",
+          isCollapsed && "justify-center"
+        )}>
+          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+          {!isCollapsed && <span>System Online</span>}
+        </div>
       </div>
     </div>
   )

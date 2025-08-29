@@ -418,6 +418,117 @@ export async function getCashSummary(storeId: string) {
 }
 
 // ==========================================
+// CASH ADJUSTMENTS
+// ==========================================
+
+export interface CashAdjustment {
+  id?: string
+  store_id: string
+  adjustment_type: 'initial_setup' | 'correction' | 'injection' | 'loss'
+  account_type: 'sales_cash' | 'petty_cash'
+  requested_amount: number
+  approved_amount?: number
+  reason: string
+  status: 'pending' | 'approved' | 'rejected' | 'completed'
+  priority: 'low' | 'medium' | 'high'
+  requested_by: string
+  request_date?: string
+  approved_by?: string
+  approval_date?: string
+  approval_notes?: string
+  current_balance_snapshot?: number
+  is_adjustment: boolean
+}
+
+export async function createAdjustmentRequest(adjustment: Omit<CashAdjustment, 'id' | 'is_adjustment'>) {
+  // Get current balance for snapshot
+  const { data: balanceData } = await supabase
+    .rpc('get_current_cash_balance', {
+      p_store_id: adjustment.store_id,
+      p_account_type: adjustment.account_type
+    })
+
+  const { data, error } = await supabase
+    .from('cash_transfers')
+    .insert([{
+      ...adjustment,
+      is_adjustment: true,
+      current_balance_snapshot: balanceData || 0,
+      // Ensure loss adjustments are negative
+      requested_amount: adjustment.adjustment_type === 'loss' 
+        ? -Math.abs(adjustment.requested_amount)
+        : Math.abs(adjustment.requested_amount)
+    }])
+    .select()
+
+  if (error) throw error
+  
+  if (!data || data.length === 0) {
+    throw new Error('Failed to create adjustment request - no data returned')
+  }
+  
+  return data[0]
+}
+
+export async function getAdjustmentRequests(storeId?: string, status?: string) {
+  let query = supabase
+    .from('cash_transfers')
+    .select('*')
+    .eq('is_adjustment', true)
+    .order('request_date', { ascending: false })
+
+  if (storeId) {
+    query = query.eq('store_id', storeId)
+  }
+  
+  if (status) {
+    query = query.eq('status', status)
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+  return data
+}
+
+export async function getPendingAdjustments() {
+  const { data, error } = await supabase
+    .from('cash_transfers')
+    .select('*')
+    .eq('is_adjustment', true)
+    .eq('status', 'pending')
+    .order('request_date', { ascending: false })
+
+  if (error) throw error
+  return data
+}
+
+export async function getAdjustmentAudit(storeId?: string) {
+  let query = supabase
+    .from('cash_adjustment_audit')
+    .select('*')
+    .order('request_date', { ascending: false })
+
+  if (storeId) {
+    query = query.eq('store_id', storeId)
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+  return data
+}
+
+export async function getCurrentAccountBalance(storeId: string, accountType: 'sales_cash' | 'petty_cash') {
+  const { data, error } = await supabase
+    .rpc('get_current_cash_balance', {
+      p_store_id: storeId,
+      p_account_type: accountType
+    })
+
+  if (error) throw error
+  return data || 0
+}
+
+// ==========================================
 // STORES (temporary until proper auth)
 // ==========================================
 

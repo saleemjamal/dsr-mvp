@@ -42,10 +42,10 @@ interface ExpenseWithStore {
 
 const getCategoryColor = (category: string) => {
   const colors = {
-    "Staff Welfare": "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
-    "Logistics": "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
-    "Utilities": "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300",
-    "Miscellaneous": "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300"
+    "Staff Welfare": "bg-blue-500 text-white dark:bg-blue-600 border-0",
+    "Logistics": "bg-green-500 text-white dark:bg-green-600 border-0",
+    "Utilities": "bg-orange-500 text-white dark:bg-orange-600 border-0",
+    "Miscellaneous": "bg-gray-500 text-white dark:bg-gray-600 border-0"
   } as const
   
   return colors[category as keyof typeof colors] || colors["Miscellaneous"]

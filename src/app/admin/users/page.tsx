@@ -42,8 +42,13 @@ interface WhitelistEntry {
   id: string
   email?: string
   domain?: string
+  assigned_role?: UserRole
+  assigned_store_ids?: string[]
+  notes?: string
   is_active: boolean
   created_at: string
+  updated_at?: string
+  added_by?: string
 }
 
 export default function UserManagementPage() {
@@ -54,6 +59,9 @@ export default function UserManagementPage() {
   const [loading, setLoading] = useState(false)
   const [newWhitelistEmail, setNewWhitelistEmail] = useState("")
   const [newWhitelistDomain, setNewWhitelistDomain] = useState("")
+  const [newWhitelistRole, setNewWhitelistRole] = useState<UserRole>(UserRole.CASHIER)
+  const [newWhitelistStores, setNewWhitelistStores] = useState<string[]>([])
+  const [newWhitelistNotes, setNewWhitelistNotes] = useState("")
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null)
   const [showAddWhitelist, setShowAddWhitelist] = useState(false)
   const [showStoreAssignment, setShowStoreAssignment] = useState(false)
@@ -116,9 +124,15 @@ export default function UserManagementPage() {
     }
 
     try {
-      const insertData = type === 'email' 
+      const insertData: any = type === 'email' 
         ? { email: value.trim().toLowerCase() }
         : { domain: value.trim().toLowerCase() }
+      
+      // Add role and store assignments
+      insertData.assigned_role = newWhitelistRole
+      insertData.assigned_store_ids = newWhitelistStores
+      insertData.notes = newWhitelistNotes.trim()
+      insertData.added_by = profile?.id
 
       const { error } = await supabase
         .from('email_whitelist')
@@ -126,9 +140,12 @@ export default function UserManagementPage() {
 
       if (error) throw error
 
-      toast.success(`${type === 'email' ? 'Email' : 'Domain'} added to whitelist`)
+      toast.success(`${type === 'email' ? 'Email' : 'Domain'} added to whitelist with ${getRoleDisplayName(newWhitelistRole)} role`)
       setNewWhitelistEmail("")
       setNewWhitelistDomain("")
+      setNewWhitelistRole(UserRole.CASHIER)
+      setNewWhitelistStores([])
+      setNewWhitelistNotes("")
       setShowAddWhitelist(false)
       loadWhitelist()
     } catch (error: any) {
@@ -438,47 +455,131 @@ export default function UserManagementPage() {
                             Add to Whitelist
                           </Button>
                         </DialogTrigger>
-                        <DialogContent>
+                        <DialogContent className="max-w-2xl">
                           <DialogHeader>
                             <DialogTitle>Add to Whitelist</DialogTitle>
                             <DialogDescription>
-                              Add an email address or domain to allow user registration
+                              Add an email address or domain with pre-assigned role and store access
                             </DialogDescription>
                           </DialogHeader>
                           <div className="space-y-4">
+                            <Tabs defaultValue="email" className="w-full">
+                              <TabsList className="grid w-full grid-cols-2">
+                                <TabsTrigger value="email">Email</TabsTrigger>
+                                <TabsTrigger value="domain">Domain</TabsTrigger>
+                              </TabsList>
+                              
+                              <TabsContent value="email" className="space-y-4">
+                                <div>
+                                  <Label htmlFor="email">Email Address *</Label>
+                                  <Input
+                                    id="email"
+                                    placeholder="user@company.com"
+                                    value={newWhitelistEmail}
+                                    onChange={(e) => setNewWhitelistEmail(e.target.value)}
+                                  />
+                                </div>
+                              </TabsContent>
+                              
+                              <TabsContent value="domain" className="space-y-4">
+                                <div>
+                                  <Label htmlFor="domain">Domain *</Label>
+                                  <Input
+                                    id="domain"
+                                    placeholder="company.com"
+                                    value={newWhitelistDomain}
+                                    onChange={(e) => setNewWhitelistDomain(e.target.value)}
+                                  />
+                                </div>
+                              </TabsContent>
+                            </Tabs>
+
+                            {/* Role Selection */}
                             <div>
-                              <Label htmlFor="email">Email Address</Label>
-                              <Input
-                                id="email"
-                                placeholder="user@company.com"
-                                value={newWhitelistEmail}
-                                onChange={(e) => setNewWhitelistEmail(e.target.value)}
-                              />
-                              <Button 
-                                className="mt-2 w-full" 
-                                onClick={() => addToWhitelist('email')}
-                                disabled={!newWhitelistEmail.trim()}
-                              >
-                                Add Email
-                              </Button>
+                              <Label htmlFor="role">Assigned Role *</Label>
+                              <Select value={newWhitelistRole} onValueChange={(value) => setNewWhitelistRole(value as UserRole)}>
+                                <SelectTrigger id="role">
+                                  <SelectValue placeholder="Select a role" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value={UserRole.CASHIER}>Cashier</SelectItem>
+                                  <SelectItem value={UserRole.STORE_MANAGER}>Store Manager</SelectItem>
+                                  <SelectItem value={UserRole.ACCOUNTS_INCHARGE}>Accounts Incharge</SelectItem>
+                                  {profile?.role === UserRole.SUPER_USER && (
+                                    <SelectItem value={UserRole.SUPER_USER}>Super User</SelectItem>
+                                  )}
+                                </SelectContent>
+                              </Select>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                User will be assigned this role when they first login
+                              </p>
                             </div>
-                            <div className="text-center text-muted-foreground">or</div>
+
+                            {/* Store Selection */}
                             <div>
-                              <Label htmlFor="domain">Domain</Label>
-                              <Input
-                                id="domain"
-                                placeholder="company.com"
-                                value={newWhitelistDomain}
-                                onChange={(e) => setNewWhitelistDomain(e.target.value)}
-                              />
-                              <Button 
-                                className="mt-2 w-full"
-                                onClick={() => addToWhitelist('domain')}
-                                disabled={!newWhitelistDomain.trim()}
-                              >
-                                Add Domain
-                              </Button>
+                              <Label htmlFor="stores">Assigned Stores</Label>
+                              <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-2">
+                                {stores.filter(s => s.is_active).map((store) => (
+                                  <div key={store.id} className="flex items-center space-x-2">
+                                    <input
+                                      type="checkbox"
+                                      id={`store-${store.id}`}
+                                      checked={newWhitelistStores.includes(store.id)}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setNewWhitelistStores([...newWhitelistStores, store.id])
+                                        } else {
+                                          setNewWhitelistStores(newWhitelistStores.filter(id => id !== store.id))
+                                        }
+                                      }}
+                                      className="rounded border-gray-300"
+                                    />
+                                    <Label htmlFor={`store-${store.id}`} className="font-normal cursor-pointer">
+                                      {store.store_name} ({store.store_code})
+                                    </Label>
+                                  </div>
+                                ))}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Select stores the user will have access to
+                              </p>
                             </div>
+
+                            {/* Notes */}
+                            <div>
+                              <Label htmlFor="notes">Notes (Optional)</Label>
+                              <Input
+                                id="notes"
+                                placeholder="e.g., Temporary access for audit"
+                                value={newWhitelistNotes}
+                                onChange={(e) => setNewWhitelistNotes(e.target.value)}
+                              />
+                            </div>
+
+                            <DialogFooter>
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setShowAddWhitelist(false)
+                                  setNewWhitelistEmail("")
+                                  setNewWhitelistDomain("")
+                                  setNewWhitelistRole(UserRole.CASHIER)
+                                  setNewWhitelistStores([])
+                                  setNewWhitelistNotes("")
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                onClick={() => {
+                                  const type = newWhitelistEmail.trim() ? 'email' : 'domain'
+                                  addToWhitelist(type)
+                                }}
+                                disabled={!newWhitelistEmail.trim() && !newWhitelistDomain.trim()}
+                              >
+                                Add to Whitelist
+                              </Button>
+                            </DialogFooter>
                           </div>
                         </DialogContent>
                       </Dialog>
@@ -491,6 +592,8 @@ export default function UserManagementPage() {
                           <TableRow>
                             <TableHead>Type</TableHead>
                             <TableHead>Value</TableHead>
+                            <TableHead>Assigned Role</TableHead>
+                            <TableHead>Stores</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Added</TableHead>
                             <TableHead>Actions</TableHead>
@@ -506,6 +609,36 @@ export default function UserManagementPage() {
                               </TableCell>
                               <TableCell className="font-mono">
                                 {entry.email || entry.domain}
+                                {entry.notes && (
+                                  <p className="text-xs text-muted-foreground mt-1">{entry.notes}</p>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <Badge className={getRoleColor(entry.assigned_role || UserRole.CASHIER)}>
+                                  <Shield className="mr-1 h-3 w-3" />
+                                  {getRoleDisplayName(entry.assigned_role || UserRole.CASHIER)}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {entry.assigned_store_ids && entry.assigned_store_ids.length > 0 ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    {entry.assigned_store_ids.slice(0, 2).map((storeId) => {
+                                      const store = stores.find(s => s.id === storeId)
+                                      return store ? (
+                                        <Badge key={storeId} variant="outline" className="text-xs">
+                                          {store.store_code}
+                                        </Badge>
+                                      ) : null
+                                    })}
+                                    {entry.assigned_store_ids.length > 2 && (
+                                      <Badge variant="outline" className="text-xs">
+                                        +{entry.assigned_store_ids.length - 2}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground text-sm">No stores</span>
+                                )}
                               </TableCell>
                               <TableCell>
                                 <Badge variant={entry.is_active ? "success" : "secondary"}>

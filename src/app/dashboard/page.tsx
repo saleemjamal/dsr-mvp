@@ -201,39 +201,48 @@ export default function Dashboard() {
           <>
             {/* Primary Metrics Row */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
-              <Card>
+              <Card className="overflow-hidden border-0 shadow-lg">
+                <div className="gradient-info dark:gradient-subtle-blue h-2"></div>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
-                  <DollarSign className="h-4 w-4 text-muted-foreground" />
+                  <div className="rounded-full bg-blue-100 dark:bg-blue-900/30 p-2">
+                    <DollarSign className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{formatCurrency(dashboardData.totalSales)}</div>
+                  <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">{formatCurrency(dashboardData.totalSales)}</div>
                   <p className="text-xs text-muted-foreground">
                     {filters.dateRange.preset || 'Custom period'}
                   </p>
                 </CardContent>
               </Card>
               
-              <Card>
+              <Card className="overflow-hidden border-0 shadow-lg">
+                <div className="gradient-warning dark:gradient-subtle h-2"></div>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
-                  <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                  <div className="rounded-full bg-orange-100 dark:bg-orange-900/30 p-2">
+                    <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{formatCurrency(dashboardData.totalExpenses)}</div>
+                  <div className="text-2xl font-bold text-orange-700 dark:text-orange-400">{formatCurrency(dashboardData.totalExpenses)}</div>
                   <p className="text-xs text-muted-foreground">
                     {filters.dateRange.preset || 'Custom period'}
                   </p>
                 </CardContent>
               </Card>
               
-              <Card>
+              <Card className={`overflow-hidden border-0 shadow-lg ${dashboardData.netPosition >= 0 ? 'dark:glow-success' : 'dark:glow-danger'}`}>
+                <div className={`h-2 ${dashboardData.netPosition >= 0 ? 'gradient-success dark:gradient-subtle-green' : 'bg-gradient-to-r from-red-500 to-red-600'}`}></div>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Net Position</CardTitle>
-                  <TrendingUp className={`h-4 w-4 ${dashboardData.netPosition >= 0 ? 'text-green-500' : 'text-red-500'}`} />
+                  <div className={`rounded-full p-2 ${dashboardData.netPosition >= 0 ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
+                    <TrendingUp className={`h-4 w-4 ${dashboardData.netPosition >= 0 ? 'text-success' : 'text-red-500'}`} />
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <div className={`text-2xl font-bold ${dashboardData.netPosition >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  <div className={`text-2xl font-bold ${dashboardData.netPosition >= 0 ? 'text-cash-positive' : 'text-cash-negative'}`}>
                     {formatCurrency(dashboardData.netPosition)}
                   </div>
                   <p className="text-xs text-muted-foreground">
@@ -242,13 +251,16 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
               
-              <Card className={dashboardData.lowCashAlert ? 'border-orange-200 bg-orange-50' : ''}>
+              <Card className={`overflow-hidden border-0 shadow-lg ${Math.abs(dashboardData.cashVariance) >= 500 ? 'dark:glow-danger border-red-200 dark:border-red-800' : Math.abs(dashboardData.cashVariance) > 150 ? 'dark:glow-warning border-orange-200 dark:border-orange-800' : 'dark:glow-success'}`}>
+                <div className={`h-2 ${Math.abs(dashboardData.cashVariance) >= 500 ? 'bg-gradient-to-r from-red-500 to-red-600' : Math.abs(dashboardData.cashVariance) > 150 ? 'gradient-warning' : 'gradient-success'}`}></div>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Cash Variance</CardTitle>
-                  <Calculator className={`h-4 w-4 ${Math.abs(dashboardData.cashVariance) >= 500 ? 'text-red-500' : Math.abs(dashboardData.cashVariance) > 150 ? 'text-orange-500' : 'text-green-500'}`} />
+                  <div className={`rounded-full p-2 ${Math.abs(dashboardData.cashVariance) >= 500 ? 'bg-red-100 dark:bg-red-900/30' : Math.abs(dashboardData.cashVariance) > 150 ? 'bg-orange-100 dark:bg-orange-900/30' : 'bg-green-100 dark:bg-green-900/30'}`}>
+                    <Calculator className={`h-4 w-4 ${Math.abs(dashboardData.cashVariance) >= 500 ? 'text-cash-negative' : Math.abs(dashboardData.cashVariance) > 150 ? 'text-warning' : 'text-cash-positive'}`} />
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <div className={`text-2xl font-bold ${Math.abs(dashboardData.cashVariance) >= 500 ? 'text-red-600' : Math.abs(dashboardData.cashVariance) > 150 ? 'text-orange-600' : 'text-green-600'}`}>
+                  <div className={`text-2xl font-bold ${Math.abs(dashboardData.cashVariance) >= 500 ? 'text-cash-negative' : Math.abs(dashboardData.cashVariance) > 150 ? 'text-warning' : 'text-cash-positive'}`}>
                     {formatCurrency(dashboardData.cashVariance)}
                   </div>
                   <p className="text-xs text-muted-foreground">
@@ -260,52 +272,60 @@ export default function Dashboard() {
 
             {/* Secondary Metrics Row */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <Card className="overflow-hidden border-0 shadow-md hover:shadow-lg transition-shadow">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-transparent">
                   <CardTitle className="text-sm font-medium">Hand Bills</CardTitle>
-                  <Receipt className="h-4 w-4 text-blue-500" />
+                  <div className="rounded-full bg-blue-100 dark:bg-blue-900/30 p-2">
+                    <Receipt className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-blue-600">{formatCurrency(dashboardData.totalHandBills)}</div>
+                  <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">{formatCurrency(dashboardData.totalHandBills)}</div>
                   <p className="text-xs text-muted-foreground">
                     Credit transactions
                   </p>
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <Card className="overflow-hidden border-0 shadow-md hover:shadow-lg transition-shadow">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 bg-gradient-to-br from-orange-50 to-white dark:from-orange-900/20 dark:to-transparent">
                   <CardTitle className="text-sm font-medium">Returns</CardTitle>
-                  <ArrowUpDown className="h-4 w-4 text-orange-500" />
+                  <div className="rounded-full bg-orange-100 dark:bg-orange-900/30 p-2">
+                    <ArrowUpDown className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-orange-600">{formatCurrency(dashboardData.totalReturns)}</div>
+                  <div className="text-2xl font-bold text-orange-700 dark:text-orange-400">{formatCurrency(dashboardData.totalReturns)}</div>
                   <p className="text-xs text-muted-foreground">
                     Returned transactions
                   </p>
                 </CardContent>
               </Card>
               
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <Card className="overflow-hidden border-0 shadow-md hover:shadow-lg transition-shadow">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 bg-gradient-to-br from-pink-50 to-white dark:from-pink-900/20 dark:to-transparent">
                   <CardTitle className="text-sm font-medium">Active Vouchers</CardTitle>
-                  <Gift className="h-4 w-4 text-muted-foreground" />
+                  <div className="rounded-full bg-pink-100 dark:bg-pink-900/30 p-2">
+                    <Gift className="h-4 w-4 text-pink-600 dark:text-pink-400" />
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{dashboardData.activeVouchers}</div>
+                  <div className="text-2xl font-bold text-pink-700 dark:text-pink-400">{dashboardData.activeVouchers}</div>
                   <p className="text-xs text-muted-foreground">
                     {formatCurrency(dashboardData.vouchersOutstanding)} outstanding
                   </p>
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <Card className="overflow-hidden border-0 shadow-md hover:shadow-lg transition-shadow">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 bg-gradient-to-br from-purple-50 to-white dark:from-purple-900/20 dark:to-transparent">
                   <CardTitle className="text-sm font-medium">Transactions</CardTitle>
-                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <div className="rounded-full bg-purple-100 dark:bg-purple-900/30 p-2">
+                    <Users className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{dashboardData.totalTransactions}</div>
+                  <div className="text-2xl font-bold text-purple-700 dark:text-purple-400">{dashboardData.totalTransactions}</div>
                   <p className="text-xs text-muted-foreground">
                     Avg: {formatCurrency(dashboardData.averageTransactionValue)}
                   </p>

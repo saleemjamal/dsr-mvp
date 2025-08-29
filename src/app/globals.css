@@ -37,6 +37,26 @@
     --sidebar-accent-foreground: 222.2 47.4% 11.2%;
     --sidebar-border: 214.3 31.8% 91.4%;
     --sidebar-ring: 222.2 84% 4.9%;
+    
+    /* Enhanced Vibrant Colors */
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
+    
+    /* Transaction Type Colors */
+    --transaction-cash: 217 91% 60%;
+    --transaction-upi: 271 91% 65%;
+    --transaction-card: 38 92% 50%;
+    --transaction-voucher: 330 81% 60%;
+    
+    /* Cash Management Colors */
+    --cash-positive: 142 71% 45%;
+    --cash-negative: 0 84% 60%;
+    --cash-variance-low: 38 92% 50%;
+    --cash-variance-high: 0 84% 60%;
   }
 
   .dark {
@@ -72,6 +92,26 @@
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+    
+    /* Enhanced Vibrant Colors - Dark Mode */
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 60%;
+    --warning-foreground: 0 0% 0%;
+    --info: 199 89% 58%;
+    --info-foreground: 0 0% 0%;
+    
+    /* Transaction Type Colors - Brighter for Dark Mode */
+    --transaction-cash: 217 91% 70%;
+    --transaction-upi: 271 91% 75%;
+    --transaction-card: 38 92% 65%;
+    --transaction-voucher: 330 81% 70%;
+    
+    /* Cash Management Colors - Dark Mode */
+    --cash-positive: 142 71% 55%;
+    --cash-negative: 0 84% 70%;
+    --cash-variance-low: 38 92% 65%;
+    --cash-variance-high: 0 84% 70%;
   }
 }
 
@@ -81,5 +121,126 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  /* Gradient Backgrounds */
+  .gradient-success {
+    background: linear-gradient(135deg, hsl(var(--success)) 0%, hsl(var(--success) / 0.8) 100%);
+  }
+  
+  .gradient-warning {
+    background: linear-gradient(135deg, hsl(var(--warning)) 0%, hsl(var(--warning) / 0.8) 100%);
+  }
+  
+  .gradient-info {
+    background: linear-gradient(135deg, hsl(var(--info)) 0%, hsl(var(--info) / 0.8) 100%);
+  }
+  
+  .gradient-cash {
+    background: linear-gradient(135deg, hsl(var(--transaction-cash)) 0%, hsl(var(--transaction-cash) / 0.8) 100%);
+  }
+  
+  .gradient-upi {
+    background: linear-gradient(135deg, hsl(var(--transaction-upi)) 0%, hsl(var(--transaction-upi) / 0.8) 100%);
+  }
+  
+  /* Dark Mode Subtle Gradients */
+  .dark .gradient-subtle {
+    background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%);
+  }
+  
+  .dark .gradient-subtle-blue {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(37, 99, 235, 0.05) 100%);
+  }
+  
+  .dark .gradient-subtle-green {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.05) 100%);
+  }
+  
+  .dark .gradient-subtle-purple {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(167, 139, 250, 0.05) 100%);
+  }
+  
+  /* Glass Effect */
+  .glass {
+    @apply backdrop-blur-sm bg-white/80 dark:bg-gray-900/80;
+  }
+  
+  /* Glow Effects for Dark Mode */
+  .dark .glow-success {
+    box-shadow: 0 0 20px rgba(52, 211, 153, 0.15);
+  }
+  
+  .dark .glow-warning {
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.15);
+  }
+  
+  .dark .glow-danger {
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.15);
+  }
+  
+  /* Text Colors */
+  .text-success {
+    color: hsl(var(--success));
+  }
+  
+  .text-warning {
+    color: hsl(var(--warning));
+  }
+  
+  .text-info {
+    color: hsl(var(--info));
+  }
+  
+  .text-cash-positive {
+    color: hsl(var(--cash-positive));
+  }
+  
+  .text-cash-negative {
+    color: hsl(var(--cash-negative));
+  }
+  
+  /* Border Colors */
+  .border-success {
+    border-color: hsl(var(--success));
+  }
+  
+  .border-warning {
+    border-color: hsl(var(--warning));
+  }
+  
+  .border-info {
+    border-color: hsl(var(--info));
+  }
+  
+  /* Background Colors */
+  .bg-success {
+    background-color: hsl(var(--success));
+  }
+  
+  .bg-warning {
+    background-color: hsl(var(--warning));
+  }
+  
+  .bg-info {
+    background-color: hsl(var(--info));
+  }
+  
+  .bg-transaction-cash {
+    background-color: hsl(var(--transaction-cash));
+  }
+  
+  .bg-transaction-upi {
+    background-color: hsl(var(--transaction-upi));
+  }
+  
+  .bg-transaction-card {
+    background-color: hsl(var(--transaction-card));
+  }
+  
+  .bg-transaction-voucher {
+    background-color: hsl(var(--transaction-voucher));
   }
 }

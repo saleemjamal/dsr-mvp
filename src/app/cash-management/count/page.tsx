@@ -226,11 +226,12 @@ export default function CashCountPage() {
             />
 
             {/* Summary Card */}
-            <Card>
+            <Card className="overflow-hidden border-0 shadow-lg">
+              <div className={`h-2 ${getTotalVariance() === 0 ? 'gradient-success' : Math.abs(getTotalVariance()) >= 500 ? 'bg-gradient-to-r from-red-500 to-red-600' : 'gradient-warning'}`}></div>
               <CardHeader>
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
-                    <Calculator className="h-5 w-5 text-blue-600 dark:text-blue-300" />
+                  <div className="p-3 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 shadow-md">
+                    <Calculator className="h-5 w-5 text-white" />
                   </div>
                   <div>
                     <CardTitle>Count Summary</CardTitle>
@@ -244,12 +245,14 @@ export default function CashCountPage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   
                   {/* Total Cash */}
-                  <div className="space-y-2">
+                  <div className="space-y-2 p-4 rounded-lg bg-gradient-to-br from-green-50 to-white dark:from-green-900/20 dark:to-transparent">
                     <div className="flex items-center gap-2">
-                      <IndianRupee className="h-4 w-4 text-muted-foreground" />
+                      <div className="rounded-full bg-green-100 dark:bg-green-900/30 p-1">
+                        <IndianRupee className="h-4 w-4 text-success" />
+                      </div>
                       <span className="text-sm font-medium">Total Cash Counted</span>
                     </div>
-                    <p className="text-2xl font-bold text-green-600">
+                    <p className="text-2xl font-bold text-cash-positive">
                       {formatCurrency(salesCashData.totalAmount + pettyCashData.totalAmount)}
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -259,12 +262,14 @@ export default function CashCountPage() {
                   </div>
 
                   {/* Total Expected */}
-                  <div className="space-y-2">
+                  <div className="space-y-2 p-4 rounded-lg bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-transparent">
                     <div className="flex items-center gap-2">
-                      <Calculator className="h-4 w-4 text-muted-foreground" />
+                      <div className="rounded-full bg-blue-100 dark:bg-blue-900/30 p-1">
+                        <Calculator className="h-4 w-4 text-info" />
+                      </div>
                       <span className="text-sm font-medium">Total Expected</span>
                     </div>
-                    <p className="text-2xl font-bold">
+                    <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">
                       {formatCurrency(expectedAmounts.salesDrawer + expectedAmounts.pettyCash)}
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -274,18 +279,31 @@ export default function CashCountPage() {
                   </div>
 
                   {/* Total Variance */}
-                  <div className="space-y-2">
+                  <div className={`space-y-2 p-4 rounded-lg ${
+                    getTotalVariance() === 0 ? 'bg-gradient-to-br from-green-50 to-white dark:from-green-900/20 dark:to-transparent' :
+                    Math.abs(getTotalVariance()) >= 500 ? 'bg-gradient-to-br from-red-50 to-white dark:from-red-900/20 dark:to-transparent' :
+                    'bg-gradient-to-br from-orange-50 to-white dark:from-orange-900/20 dark:to-transparent'
+                  }`}>
                     <div className="flex items-center gap-2">
-                      {getTotalVariance() === 0 ? (
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <AlertTriangle className="h-4 w-4 text-orange-500" />
-                      )}
+                      <div className={`rounded-full p-1 ${
+                        getTotalVariance() === 0 ? 'bg-green-100 dark:bg-green-900/30' :
+                        Math.abs(getTotalVariance()) >= 500 ? 'bg-red-100 dark:bg-red-900/30' :
+                        'bg-orange-100 dark:bg-orange-900/30'
+                      }`}>
+                        {getTotalVariance() === 0 ? (
+                          <CheckCircle className="h-4 w-4 text-success" />
+                        ) : Math.abs(getTotalVariance()) >= 500 ? (
+                          <AlertTriangle className="h-4 w-4 text-cash-negative" />
+                        ) : (
+                          <AlertTriangle className="h-4 w-4 text-warning" />
+                        )}
+                      </div>
                       <span className="text-sm font-medium">Total Variance</span>
                     </div>
                     <p className={`text-2xl font-bold ${
-                      getTotalVariance() === 0 ? 'text-green-600' :
-                      getTotalVariance() > 0 ? 'text-orange-600' : 'text-red-600'
+                      getTotalVariance() === 0 ? 'text-cash-positive' :
+                      Math.abs(getTotalVariance()) >= 500 ? 'text-cash-negative' :
+                      'text-warning'
                     }`}>
                       {getTotalVariance() > 0 ? '+' : ''}{formatCurrency(getTotalVariance())}
                     </p>

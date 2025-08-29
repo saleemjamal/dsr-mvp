@@ -40,14 +40,15 @@ interface SaleWithStore {
 }
 
 const getTenderTypeBadge = (type: string) => {
-  const variants = {
-    cash: "default",
-    upi: "secondary",
-    credit_card: "outline",
-    gift_voucher: "destructive"
+  // Return custom badge with transaction-specific colors
+  const badgeStyles = {
+    cash: "bg-transaction-cash text-white border-0",
+    upi: "bg-transaction-upi text-white border-0", 
+    credit_card: "bg-transaction-card text-white border-0",
+    gift_voucher: "bg-transaction-voucher text-white border-0"
   } as const
   
-  return variants[type as keyof typeof variants] || "default"
+  return badgeStyles[type as keyof typeof badgeStyles] || "bg-gray-500 text-white"
 }
 
 const formatCurrency = (amount: number) => {
@@ -311,7 +312,7 @@ export default function SalesPage() {
                               {formatCurrency(sale.amount)}
                             </TableCell>
                             <TableCell>
-                              <Badge variant={getTenderTypeBadge(sale.tender_type)}>
+                              <Badge className={getTenderTypeBadge(sale.tender_type)}>
                                 {sale.tender_type.replace('_', ' ').toUpperCase()}
                               </Badge>
                             </TableCell>
@@ -381,7 +382,7 @@ export default function SalesPage() {
                             {new Date(sale.sale_date).toLocaleDateString('en-IN')}
                           </p>
                         </div>
-                        <Badge variant={getTenderTypeBadge(sale.tender_type)}>
+                        <Badge className={getTenderTypeBadge(sale.tender_type)}>
                           {sale.tender_type.replace('_', ' ').toUpperCase()}
                         </Badge>
                       </div>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
@@ -11,62 +11,91 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowLeft, ArrowRight, IndianRupee, Send, Clock, CheckCircle, XCircle, AlertTriangle, Plus } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ArrowLeft, ArrowRight, IndianRupee, Send, Clock, CheckCircle, XCircle, AlertTriangle, Plus, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
+import { useAuth } from "@/hooks/use-auth"
+import { 
+  createTransferRequest, 
+  getTransferRequests, 
+  getCurrentCashBalance, 
+  getLatestCashCount,
+  getDefaultStore,
+  type CashTransfer,
+  type CashBalance 
+} from "@/lib/cash-service"
 
-// Mock current balances
-const mockBalances = {
-  salesCash: 15050,
-  pettyCash: 1800, // Below threshold
-  threshold: 2000
-}
-
-// Mock transfer history
-const mockTransfers = [
-  {
-    id: "1",
-    requestedAmount: 5000,
-    approvedAmount: 3000,
-    reason: "Petty cash running low for daily operations",
-    status: "approved",
-    requestedBy: "Manager A",
-    approvedBy: "AIC",
-    requestDate: "2025-01-22T09:30:00Z",
-    approvalDate: "2025-01-22T10:15:00Z",
-    notes: "Reduced amount due to upcoming large deposit"
-  },
-  {
-    id: "2",
-    requestedAmount: 2000,
-    approvedAmount: 2000,
-    reason: "Change fund replenishment",
-    status: "pending",
-    requestedBy: "Manager B",
-    requestDate: "2025-01-22T14:20:00Z"
-  },
-  {
-    id: "3",
-    requestedAmount: 4000,
-    approvedAmount: 0,
-    reason: "Additional cash for weekend operations",
-    status: "rejected",
-    requestedBy: "Manager A",
-    approvedBy: "AIC",
-    requestDate: "2025-01-21T16:45:00Z",
-    approvalDate: "2025-01-21T17:00:00Z",
-    notes: "Sufficient petty cash available, request unnecessary"
-  }
-]
+// Petty cash minimum threshold
+const PETTY_CASH_THRESHOLD = 2000
 
 export default function CashTransfersPage() {
   const router = useRouter()
+  const { profile } = useAuth()
   const [loading, setLoading] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(false)
   const [showRequestForm, setShowRequestForm] = useState(false)
+  const [storeId, setStoreId] = useState<string>("")
+  const [transfers, setTransfers] = useState<CashTransfer[]>([])
+  const [currentBalance, setCurrentBalance] = useState<CashBalance | null>(null)
+  const [actualBalances, setActualBalances] = useState({
+    salesCash: 0,
+    pettyCash: 0
+  })
   const [formData, setFormData] = useState({
     amount: '',
-    reason: ''
+    reason: '',
+    priority: 'medium'
   })
+
+  // Load store, balances, and transfers on mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setInitialLoading(true)
+        
+        // Get default store
+        const store = await getDefaultStore()
+        if (!store) {
+          toast.error('No store found. Please contact administrator.')
+          return
+        }
+        setStoreId(store.id)
+        
+        // Get current cash balance
+        const balance = await getCurrentCashBalance(store.id)
+        if (balance) {
+          setCurrentBalance(balance)
+        }
+        
+        // Get latest actual counts for display
+        const salesCount = await getLatestCashCount(store.id, 'sales_drawer')
+        const pettyCount = await getLatestCashCount(store.id, 'petty_cash')
+        
+        setActualBalances({
+          salesCash: salesCount?.total_counted || 0,
+          pettyCash: pettyCount?.total_counted || 0
+        })
+        
+        // Auto-set priority if petty cash is low
+        if (pettyCount && pettyCount.total_counted < PETTY_CASH_THRESHOLD) {
+          setFormData(prev => ({ ...prev, priority: 'high' }))
+        }
+        
+        // Get transfer history
+        const transferHistory = await getTransferRequests(store.id)
+        setTransfers(transferHistory || [])
+        
+      } catch (error) {
+        console.error('Error loading data:', error)
+        toast.error('Failed to load cash management data')
+      } finally {
+        setInitialLoading(false)
+      }
+    }
+    
+    loadData()
+  }, [])
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -80,8 +109,8 @@ export default function CashTransfersPage() {
       errors.push("Valid transfer amount is required")
     }
     
-    if (amount > mockBalances.salesCash) {
-      errors.push(`Transfer amount exceeds available sales cash (${formatCurrency(mockBalances.salesCash)})`)
+    if (amount > actualBalances.salesCash) {
+      errors.push(`Transfer amount exceeds available sales cash (${formatCurrency(actualBalances.salesCash)})`)
     }
     
     if (!formData.reason.trim()) {
@@ -94,6 +123,16 @@ export default function CashTransfersPage() {
   const handleSubmitRequest = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    if (!storeId) {
+      toast.error("Store information not loaded")
+      return
+    }
+    
+    if (!profile) {
+      toast.error("User profile not loaded")
+      return
+    }
+    
     const validationErrors = validateRequest()
     if (validationErrors.length > 0) {
       validationErrors.forEach(error => toast.error(error))
@@ -103,30 +142,30 @@ export default function CashTransfersPage() {
     setLoading(true)
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      
-      const transferRequest = {
-        id: String(Date.now()),
-        requestedAmount: parseFloat(formData.amount),
+      const transferRequest = await createTransferRequest({
+        store_id: storeId,
+        requested_amount: parseFloat(formData.amount),
         reason: formData.reason,
         status: 'pending',
-        requestedBy: 'current-user-id', // TODO: Get from auth context
-        requestDate: new Date().toISOString(),
-        currentBalances: {
-          salesCash: mockBalances.salesCash,
-          pettyCash: mockBalances.pettyCash
-        }
-      }
-
-      console.log('Submitting transfer request:', transferRequest)
+        priority: formData.priority as 'low' | 'medium' | 'high',
+        requested_by: profile.full_name || profile.email || 'Unknown User',
+        request_date: new Date().toISOString(),
+        sales_cash_balance: actualBalances.salesCash,
+        petty_cash_balance: actualBalances.pettyCash
+      })
       
       toast.success(`Transfer request for ${formatCurrency(parseFloat(formData.amount))} submitted successfully!`)
       
       // Reset form
-      setFormData({ amount: '', reason: '' })
+      setFormData({ amount: '', reason: '', priority: 'medium' })
       setShowRequestForm(false)
       
+      // Reload transfers list
+      const updatedTransfers = await getTransferRequests(storeId)
+      setTransfers(updatedTransfers || [])
+      
     } catch (error) {
+      console.error('Error submitting transfer request:', error)
       toast.error("Failed to submit transfer request. Please try again.")
     } finally {
       setLoading(false)
@@ -161,12 +200,33 @@ export default function CashTransfersPage() {
   const getSuggestedAmount = () => {
     // Suggest amount to bring petty cash to ₹5000
     const targetAmount = 5000
-    const currentShortfall = targetAmount - mockBalances.pettyCash
-    return Math.max(currentShortfall, mockBalances.threshold - mockBalances.pettyCash)
+    const currentShortfall = targetAmount - actualBalances.pettyCash
+    return Math.max(currentShortfall, PETTY_CASH_THRESHOLD - actualBalances.pettyCash)
   }
 
-  const isPettyCashLow = mockBalances.pettyCash < mockBalances.threshold
-  const pendingTransfers = mockTransfers.filter(t => t.status === 'pending')
+  const isPettyCashLow = actualBalances.pettyCash < PETTY_CASH_THRESHOLD
+  const pendingTransfers = transfers.filter(t => t.status === 'pending')
+
+  if (initialLoading) {
+    return (
+      <div className="flex min-h-screen">
+        <aside className="hidden lg:block w-64 border-r">
+          <Sidebar />
+        </aside>
+        <div className="flex-1">
+          <Header />
+          <main className="p-6">
+            <Card>
+              <CardContent className="py-12 text-center">
+                <Loader2 className="mx-auto h-12 w-12 animate-spin text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">Loading cash transfer data...</p>
+              </CardContent>
+            </Card>
+          </main>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -205,7 +265,7 @@ export default function CashTransfersPage() {
                 <IndianRupee className="h-4 w-4 text-green-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-green-600">{formatCurrency(mockBalances.salesCash)}</div>
+                <div className="text-2xl font-bold text-green-600">{formatCurrency(actualBalances.salesCash)}</div>
                 <p className="text-xs text-muted-foreground">Available for transfer</p>
               </CardContent>
             </Card>
@@ -217,10 +277,10 @@ export default function CashTransfersPage() {
               </CardHeader>
               <CardContent>
                 <div className={`text-2xl font-bold ${isPettyCashLow ? 'text-orange-600' : ''}`}>
-                  {formatCurrency(mockBalances.pettyCash)}
+                  {formatCurrency(actualBalances.pettyCash)}
                 </div>
                 <p className={`text-xs ${isPettyCashLow ? 'text-orange-600' : 'text-muted-foreground'}`}>
-                  {isPettyCashLow ? `Below ₹${mockBalances.threshold.toLocaleString()} threshold` : 'Sufficient balance'}
+                  {isPettyCashLow ? `Below ₹${PETTY_CASH_THRESHOLD.toLocaleString()} threshold` : 'Sufficient balance'}
                 </p>
               </CardContent>
             </Card>
@@ -233,7 +293,7 @@ export default function CashTransfersPage() {
               <CardContent>
                 <div className="text-2xl font-bold text-orange-600">{pendingTransfers.length}</div>
                 <p className="text-xs text-muted-foreground">
-                  {formatCurrency(pendingTransfers.reduce((sum, t) => sum + t.requestedAmount, 0))} total
+                  {formatCurrency(pendingTransfers.reduce((sum, t) => sum + t.requested_amount, 0))} total
                 </p>
               </CardContent>
             </Card>
@@ -248,7 +308,7 @@ export default function CashTransfersPage() {
                   <div className="flex-1">
                     <h4 className="font-medium text-orange-900 dark:text-orange-100">Low Petty Cash Alert</h4>
                     <p className="text-sm text-orange-700 dark:text-orange-300">
-                      Petty cash balance ({formatCurrency(mockBalances.pettyCash)}) is below the ₹{mockBalances.threshold.toLocaleString()} threshold. 
+                      Petty cash balance ({formatCurrency(actualBalances.pettyCash)}) is below the ₹{PETTY_CASH_THRESHOLD.toLocaleString()} threshold. 
                       Consider requesting {formatCurrency(getSuggestedAmount())} to maintain operations.
                     </p>
                   </div>
@@ -259,7 +319,8 @@ export default function CashTransfersPage() {
                     onClick={() => {
                       setFormData({ 
                         amount: getSuggestedAmount().toString(), 
-                        reason: 'Petty cash replenishment - below threshold' 
+                        reason: 'Petty cash replenishment - below threshold',
+                        priority: 'high' // High priority since below threshold
                       })
                       setShowRequestForm(true)
                     }}
@@ -294,12 +355,12 @@ export default function CashTransfersPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">Sales Cash:</span>
-                      <span className="font-bold text-green-600">{formatCurrency(mockBalances.salesCash)}</span>
+                      <span className="font-bold text-green-600">{formatCurrency(actualBalances.salesCash)}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">Petty Cash:</span>
                       <span className={`font-bold ${isPettyCashLow ? 'text-orange-600' : ''}`}>
-                        {formatCurrency(mockBalances.pettyCash)}
+                        {formatCurrency(actualBalances.pettyCash)}
                       </span>
                     </div>
                   </div>
@@ -314,7 +375,7 @@ export default function CashTransfersPage() {
                         type="number"
                         step="100"
                         min="100"
-                        max={mockBalances.salesCash}
+                        max={actualBalances.salesCash}
                         placeholder="0.00"
                         value={formData.amount}
                         onChange={(e) => handleInputChange('amount', e.target.value)}
@@ -324,7 +385,7 @@ export default function CashTransfersPage() {
                     </div>
                     <div className="flex justify-between text-xs text-muted-foreground">
                       <span>Min: ₹100</span>
-                      <span>Available: {formatCurrency(mockBalances.salesCash)}</span>
+                      <span>Available: {formatCurrency(actualBalances.salesCash)}</span>
                     </div>
                   </div>
 
@@ -364,6 +425,26 @@ export default function CashTransfersPage() {
                     </Button>
                   </div>
 
+                  {/* Priority */}
+                  <div className="space-y-2">
+                    <Label htmlFor="priority">Priority Level</Label>
+                    <Select value={formData.priority} onValueChange={(value) => handleInputChange('priority', value)}>
+                      <SelectTrigger id="priority">
+                        <SelectValue placeholder="Select priority" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">Low - Can wait 24-48 hours</SelectItem>
+                        <SelectItem value="medium">Medium - Within 24 hours</SelectItem>
+                        <SelectItem value="high">High - Urgent (within 2 hours)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {isPettyCashLow && formData.priority === 'high' && (
+                      <p className="text-xs text-orange-600">
+                        Auto-set to high priority due to low petty cash balance
+                      </p>
+                    )}
+                  </div>
+
                   {/* Reason */}
                   <div className="space-y-2">
                     <Label htmlFor="reason">Reason for Transfer *</Label>
@@ -387,14 +468,14 @@ export default function CashTransfersPage() {
                       <div className="flex items-center justify-between">
                         <div className="text-center">
                           <p className="text-sm text-blue-700 dark:text-blue-300">Sales Cash</p>
-                          <p className="font-bold">{formatCurrency(mockBalances.salesCash)}</p>
-                          <p className="text-xs text-blue-600">→ {formatCurrency(mockBalances.salesCash - parseFloat(formData.amount))}</p>
+                          <p className="font-bold">{formatCurrency(actualBalances.salesCash)}</p>
+                          <p className="text-xs text-blue-600">→ {formatCurrency(actualBalances.salesCash - parseFloat(formData.amount))}</p>
                         </div>
                         <ArrowRight className="h-6 w-6 text-blue-600" />
                         <div className="text-center">
                           <p className="text-sm text-blue-700 dark:text-blue-300">Petty Cash</p>
-                          <p className="font-bold">{formatCurrency(mockBalances.pettyCash)}</p>
-                          <p className="text-xs text-blue-600">→ {formatCurrency(mockBalances.pettyCash + parseFloat(formData.amount))}</p>
+                          <p className="font-bold">{formatCurrency(actualBalances.pettyCash)}</p>
+                          <p className="text-xs text-blue-600">→ {formatCurrency(actualBalances.pettyCash + parseFloat(formData.amount))}</p>
                         </div>
                       </div>
                     </div>
@@ -451,18 +532,18 @@ export default function CashTransfersPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {mockTransfers.map((transfer) => (
+                    {transfers.map((transfer) => (
                       <TableRow key={transfer.id}>
                         <TableCell>
-                          {new Date(transfer.requestDate).toLocaleDateString('en-IN')}
+                          {transfer.request_date ? new Date(transfer.request_date).toLocaleDateString('en-IN') : '-'}
                         </TableCell>
                         <TableCell className="font-medium">
-                          {formatCurrency(transfer.requestedAmount)}
+                          {formatCurrency(transfer.requested_amount)}
                         </TableCell>
                         <TableCell>
-                          {transfer.approvedAmount !== undefined ? (
-                            <span className={transfer.approvedAmount !== transfer.requestedAmount ? 'text-orange-600 font-medium' : ''}>
-                              {formatCurrency(transfer.approvedAmount)}
+                          {transfer.approved_amount !== undefined && transfer.approved_amount !== null ? (
+                            <span className={transfer.approved_amount !== transfer.requested_amount ? 'text-orange-600 font-medium' : ''}>
+                              {formatCurrency(transfer.approved_amount)}
                             </span>
                           ) : (
                             <span className="text-muted-foreground">-</span>
@@ -471,12 +552,12 @@ export default function CashTransfersPage() {
                         <TableCell>
                           {getStatusBadge(transfer.status)}
                         </TableCell>
-                        <TableCell>{transfer.requestedBy}</TableCell>
+                        <TableCell>{transfer.requested_by}</TableCell>
                         <TableCell className="max-w-[200px] truncate">
                           {transfer.reason}
                         </TableCell>
                         <TableCell className="max-w-[200px] truncate">
-                          {transfer.notes || '-'}
+                          {transfer.approval_notes || '-'}
                         </TableCell>
                       </TableRow>
                     ))}
