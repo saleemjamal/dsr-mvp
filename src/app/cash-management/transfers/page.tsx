@@ -16,6 +16,7 @@ import { ArrowLeft, ArrowRight, IndianRupee, Send, Clock, CheckCircle, XCircle, 
 import { toast } from "sonner"
 import Link from "next/link"
 import { useAuth } from "@/hooks/use-auth"
+import { useStore } from "@/contexts/store-context"
 import { 
   createTransferRequest, 
   getTransferRequests, 
@@ -32,6 +33,7 @@ const PETTY_CASH_THRESHOLD = 2000
 export default function CashTransfersPage() {
   const router = useRouter()
   const { profile } = useAuth()
+  const { currentStore } = useStore()
   const [loading, setLoading] = useState(false)
   const [initialLoading, setInitialLoading] = useState(false)
   const [showRequestForm, setShowRequestForm] = useState(false)
@@ -54,8 +56,12 @@ export default function CashTransfersPage() {
       try {
         setInitialLoading(true)
         
-        // Get default store
-        const store = await getDefaultStore()
+        // Use current store from context first, fallback to getDefaultStore
+        let store = currentStore
+        if (!store) {
+          store = await getDefaultStore()
+        }
+        
         if (!store) {
           toast.error('No store found. Please contact administrator.')
           return
@@ -95,7 +101,7 @@ export default function CashTransfersPage() {
     }
     
     loadData()
-  }, [])
+  }, [currentStore])
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))

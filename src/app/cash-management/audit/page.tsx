@@ -245,12 +245,12 @@ export default function CashAdjustmentAuditPage() {
                 <div className="text-2xl font-bold text-green-600">
                   {formatCurrency(
                     adjustments
-                      .filter(a => a.status === 'completed')
+                      .filter(a => a.status === 'approved' || a.status === 'completed')
                       .reduce((sum, a) => sum + a.final_amount, 0)
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Completed adjustments
+                  Approved adjustments
                 </p>
               </CardContent>
             </Card>

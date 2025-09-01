@@ -11,11 +11,13 @@ import { ArrowLeft, Save, Calculator, IndianRupee, AlertTriangle, CheckCircle } 
 import { toast } from "sonner"
 import Link from "next/link"
 import { submitCashCount, calculateExpectedCashAmount, getDefaultStore, type DenominationCount } from "@/lib/cash-service"
+import { useStore } from "@/contexts/store-context"
 
 // Remove duplicate interface since we're importing it
 
 export default function CashCountPage() {
   const router = useRouter()
+  const { currentStore } = useStore()
   const [loading, setLoading] = useState(false)
   const [storeId, setStoreId] = useState<string>("")
   const [expectedAmounts, setExpectedAmounts] = useState({
@@ -37,7 +39,12 @@ export default function CashCountPage() {
   useEffect(() => {
     const loadStoreData = async () => {
       try {
-        const store = await getDefaultStore()
+        // Use current store from context first, fallback to getDefaultStore
+        let store = currentStore
+        if (!store) {
+          store = await getDefaultStore()
+        }
+        
         if (store) {
           setStoreId(store.id)
           
@@ -57,7 +64,7 @@ export default function CashCountPage() {
     }
 
     loadStoreData()
-  }, [])
+  }, [currentStore])
 
   const handleSalesCashChange = useCallback((denominations: DenominationCount, totalAmount: number) => {
     setSalesCashData({ denominations, totalAmount })

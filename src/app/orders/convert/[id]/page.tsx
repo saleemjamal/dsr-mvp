@@ -57,10 +57,20 @@ export default function ConvertSalesOrderPage() {
   const { profile } = useAuth()
   const [loading, setLoading] = useState(false)
   const [fetchingOrder, setFetchingOrder] = useState(false)
-  const [saleId, setSaleId] = useState("")
+  const [salesOrder, setSalesOrder] = useState<SalesOrder | null>(null)
+  
+  // Credit Bill Form State
+  const [creditBillNumber, setCreditBillNumber] = useState("")
+  const [finalAmount, setFinalAmount] = useState("")
   const [balanceAmount, setBalanceAmount] = useState("")
   const [balanceTenderType, setBalanceTenderType] = useState("")
-  const [salesOrder, setSalesOrder] = useState<SalesOrder | null>(null)
+  const [varianceReason, setVarianceReason] = useState("")
+  const [notes, setNotes] = useState("")
+  
+  // Calculated values
+  const [variance, setVariance] = useState(0)
+  const [variancePercentage, setVariancePercentage] = useState(0)
+  const [refundAmount, setRefundAmount] = useState(0)
 
   // Fetch the sales order data on mount
   useEffect(() => {
@@ -82,9 +92,15 @@ export default function ConvertSalesOrderPage() {
         console.log('Sales order data loaded:', orderData)
         setSalesOrder(orderData)
         
-        // Calculate and set the balance amount
+        // Set initial values
+        setFinalAmount(orderData.total_amount.toString())
         const balanceDue = orderData.total_amount - (orderData.advance_amount || 0)
         setBalanceAmount(balanceDue.toString())
+        
+        // Generate credit bill number
+        const { generateCreditBillNumber } = await import('@/lib/sales-service')
+        const cbNumber = await generateCreditBillNumber(orderData.store_id)
+        setCreditBillNumber(cbNumber)
       } catch (error) {
         console.error('Error fetching sales order:', error)
         toast.error('Failed to load sales order')
@@ -97,6 +113,33 @@ export default function ConvertSalesOrderPage() {
     fetchSalesOrder()
   }, [params.id, router])
 
+  // Calculate variance whenever final amount changes
+  useEffect(() => {
+    if (!salesOrder) return
+    
+    const final = parseFloat(finalAmount || '0')
+    const original = salesOrder.total_amount
+    const advance = salesOrder.advance_amount || 0
+    
+    // Calculate variance
+    const varianceAmount = final - original
+    setVariance(varianceAmount)
+    
+    // Calculate variance percentage
+    const percentage = original > 0 ? (varianceAmount / original) * 100 : 0
+    setVariancePercentage(percentage)
+    
+    // Calculate balance/refund
+    const balanceDue = final - advance
+    if (balanceDue < 0) {
+      setRefundAmount(Math.abs(balanceDue))
+      setBalanceAmount('0')
+    } else {
+      setRefundAmount(0)
+      setBalanceAmount(balanceDue.toString())
+    }
+  }, [finalAmount, salesOrder])
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -107,64 +150,66 @@ export default function ConvertSalesOrderPage() {
   const handleConvert = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!saleId.trim()) {
-      toast.error("System sale ID is required")
+    if (!creditBillNumber.trim()) {
+      toast.error("Credit bill number is required")
       return
     }
     
-    if (!salesOrder) {
-      toast.error("Sales order data not loaded")
+    if (!salesOrder || !profile) {
+      toast.error("Required data not loaded")
       return
     }
-
+    
+    // Check if variance exists and reason is required
+    if (variance !== 0 && !varianceReason.trim()) {
+      toast.error("Please provide a reason for the variance")
+      return
+    }
+    
+    // Validate tender type for balance payment
     const balanceAmountNum = parseFloat(balanceAmount || '0')
-    const balanceDue = salesOrder.total_amount - (salesOrder.advance_amount || 0)
-    
-    // Validation for balance payment
-    if (balanceDue > 0) {
-      if (balanceAmountNum <= 0) {
-        toast.error("Balance payment amount is required")
-        return
-      }
-      
-      if (balanceAmountNum > balanceDue) {
-        toast.error(`Balance payment cannot exceed balance due (${formatCurrency(balanceDue)})`)
-        return
-      }
-      
-      if (!balanceTenderType) {
-        toast.error("Payment method is required for balance payment")
-        return
-      }
+    if (balanceAmountNum > 0 && !balanceTenderType) {
+      toast.error("Please select payment method for balance amount")
+      return
     }
     
     setLoading(true)
 
     try {
-      console.log('Starting conversion - Sales Order ID:', salesOrder.id, 'Sale ID:', saleId.toUpperCase())
+      console.log('Starting credit bill conversion - SO ID:', salesOrder.id)
       
-      // Prepare balance payment if there's a balance due
-      const balancePayment = balanceDue > 0 && balanceAmountNum > 0 ? {
-        amount: balanceAmountNum,
-        tenderType: balanceTenderType
-      } : undefined
+      // Import the credit bill service
+      const { createCreditBillFromSO } = await import('@/lib/sales-service')
       
-      // Call the actual conversion service
-      const result = await convertSalesOrderToSale(salesOrder.id!, saleId.toUpperCase(), balancePayment)
-      console.log('Conversion result:', result)
+      // Create the credit bill
+      const result = await createCreditBillFromSO({
+        soId: salesOrder.id!,
+        finalAmount: parseFloat(finalAmount),
+        balancePaid: balanceAmountNum,
+        balanceTenderType: balanceTenderType || '',
+        creditBillNumber: creditBillNumber,
+        varianceReason: variance !== 0 ? varianceReason : undefined,
+        notes: notes || undefined,
+        convertedBy: profile.id
+      })
       
-      toast.success(`Sales order ${salesOrder.order_number || salesOrder.id} converted successfully!`)
+      console.log('Credit bill creation result:', result)
+      
+      if (result.refund_amount && result.refund_amount > 0) {
+        toast.success(`Credit Bill ${creditBillNumber} created! Refund of ${formatCurrency(result.refund_amount)} processed.`)
+      } else {
+        toast.success(`Credit Bill ${creditBillNumber} created successfully!`)
+      }
       
       // Small delay to show success message
       setTimeout(() => {
         router.push('/orders')
-      }, 1000)
+      }, 1500)
       
     } catch (error) {
-      console.error('Error converting sales order - Full error:', error)
-      toast.error(`Failed to convert: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      console.error('Error creating credit bill:', error)
+      toast.error(`Failed to create credit bill: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
-      console.log('Setting loading to false')
       setLoading(false)
     }
   }
@@ -397,7 +442,7 @@ export default function ConvertSalesOrderPage() {
               </CardContent>
             </Card>
 
-            {/* Conversion Form */}
+            {/* Credit Bill Conversion Form */}
             <Card>
               <CardHeader>
                 <div className="flex items-center gap-3">
@@ -405,97 +450,168 @@ export default function ConvertSalesOrderPage() {
                     <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-300" />
                   </div>
                   <div>
-                    <CardTitle>Convert to Sale</CardTitle>
+                    <CardTitle>Convert to Credit Bill</CardTitle>
                     <CardDescription>
-                      Enter the system sale ID to mark this order as delivered
+                      Complete the order and generate a credit bill
                     </CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleConvert} className="space-y-6">
+                  {/* Credit Bill Number */}
                   <div className="space-y-2">
-                    <Label htmlFor="sale_id">System Sale ID *</Label>
+                    <Label htmlFor="cb_number">Credit Bill Number</Label>
                     <Input
-                      id="sale_id"
+                      id="cb_number"
                       type="text"
-                      placeholder="e.g., SALE123, TXN456"
-                      value={saleId}
-                      onChange={(e) => setSaleId(e.target.value)}
+                      value={creditBillNumber}
+                      onChange={(e) => setCreditBillNumber(e.target.value)}
                       required
                       className="font-mono"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Enter the sale ID from your billing system to link this order
+                      Auto-generated credit bill reference number
                     </p>
                   </div>
 
-                  {/* Balance Payment Section - Only show if there's a balance due */}
-                  {salesOrder && (salesOrder.total_amount - (salesOrder.advance_amount || 0)) > 0 && (
-                    <>
-                      <Separator />
-                      
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-2">
-                          <IndianRupee className="h-4 w-4 text-orange-500" />
-                          <Label className="text-base font-medium">Balance Payment Collection</Label>
-                        </div>
-                        
-                        <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
-                          <p className="text-sm font-medium text-orange-800 dark:text-orange-300">
-                            Balance Due: {formatCurrency(salesOrder.total_amount - (salesOrder.advance_amount || 0))}
-                          </p>
-                          <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
-                            Please collect the balance payment from the customer before completing conversion
-                          </p>
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="balance_amount">Balance Amount Received (₹) *</Label>
-                            <div className="relative">
-                              <IndianRupee className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                              <Input
-                                id="balance_amount"
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                max={salesOrder.total_amount - (salesOrder.advance_amount || 0)}
-                                placeholder="0.00"
-                                value={balanceAmount}
-                                onChange={(e) => setBalanceAmount(e.target.value)}
-                                className="pl-10"
-                                required
-                              />
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                              Amount collected from customer
-                            </p>
-                          </div>
-
-                          <div className="space-y-2">
-                            <TenderTypeSelect
-                              value={balanceTenderType}
-                              onValueChange={(value) => setBalanceTenderType(value)}
-                              label="Payment Method *"
-                              placeholder="Select payment method"
-                              required={true}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              How was the balance payment received?
-                            </p>
-                          </div>
-                        </div>
+                  {/* Final Amount with Variance */}
+                  <div className="space-y-2">
+                    <Label htmlFor="final_amount">Final Bill Amount (₹) *</Label>
+                    <div className="relative">
+                      <IndianRupee className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="final_amount"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0.00"
+                        value={finalAmount}
+                        onChange={(e) => setFinalAmount(e.target.value)}
+                        className="pl-10"
+                        required
+                      />
+                    </div>
+                    
+                    {/* Show variance if different from original */}
+                    {variance !== 0 && (
+                      <div className={`p-3 rounded-lg ${
+                        variance > 0 
+                          ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800' 
+                          : 'bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800'
+                      }`}>
+                        <p className={`text-sm font-medium ${
+                          variance > 0 
+                            ? 'text-blue-800 dark:text-blue-300' 
+                            : 'text-orange-800 dark:text-orange-300'
+                        }`}>
+                          Variance: {formatCurrency(Math.abs(variance))} 
+                          {variance > 0 ? ' (Increased)' : ' (Decreased)'}
+                          <span className="ml-2 text-xs">
+                            ({variancePercentage > 0 ? '+' : ''}{variancePercentage.toFixed(1)}%)
+                          </span>
+                        </p>
+                        <p className="text-xs mt-1 opacity-80">
+                          Original amount was {formatCurrency(salesOrder?.total_amount || 0)}
+                        </p>
                       </div>
-                    </>
+                    )}
+                  </div>
+
+                  {/* Variance Reason - Required if variance exists */}
+                  {variance !== 0 && (
+                    <div className="space-y-2">
+                      <Label htmlFor="variance_reason">Reason for Variance *</Label>
+                      <Input
+                        id="variance_reason"
+                        type="text"
+                        placeholder="e.g., Customer changed quantity, Price adjustment, etc."
+                        value={varianceReason}
+                        onChange={(e) => setVarianceReason(e.target.value)}
+                        required
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Please explain why the final amount differs from the original order
+                      </p>
+                    </div>
                   )}
 
+                  {/* Payment Section */}
+                  <Separator />
+                  
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <IndianRupee className="h-4 w-4 text-green-500" />
+                      <Label className="text-base font-medium">Payment Details</Label>
+                    </div>
+                    
+                    {/* Show balance or refund based on calculation */}
+                    {refundAmount > 0 ? (
+                      <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                        <p className="text-sm font-medium text-red-800 dark:text-red-300">
+                          Refund Due: {formatCurrency(refundAmount)}
+                        </p>
+                        <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                          Customer paid {formatCurrency(salesOrder?.advance_amount || 0)} advance but final bill is only {formatCurrency(parseFloat(finalAmount || '0'))}
+                        </p>
+                      </div>
+                    ) : balanceAmount && parseFloat(balanceAmount) > 0 ? (
+                      <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                        <p className="text-sm font-medium text-green-800 dark:text-green-300">
+                          Balance Due: {formatCurrency(parseFloat(balanceAmount))}
+                        </p>
+                        <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                          Advance paid: {formatCurrency(salesOrder?.advance_amount || 0)} | Final amount: {formatCurrency(parseFloat(finalAmount || '0'))}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-gray-50 dark:bg-gray-900/20 rounded-lg">
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-300">
+                          Fully Paid
+                        </p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                          Advance payment covers the full amount
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Balance Payment Method - Only show if balance is due */}
+                    {balanceAmount && parseFloat(balanceAmount) > 0 && (
+                      <div className="space-y-2">
+                        <TenderTypeSelect
+                          value={balanceTenderType}
+                          onValueChange={(value) => setBalanceTenderType(value)}
+                          label="Payment Method *"
+                          placeholder="Select payment method"
+                          required={true}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          How was the balance payment received?
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Notes */}
+                  <div className="space-y-2">
+                    <Label htmlFor="notes">Notes (Optional)</Label>
+                    <Input
+                      id="notes"
+                      type="text"
+                      placeholder="Any additional information about this conversion"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                    />
+                  </div>
+
                   <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                    <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">Conversion Process</h4>
+                    <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">What Will Happen</h4>
                     <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
-                      <li>• Order status will be changed to "DELIVERED"</li>
-                      <li>• Sale ID will be recorded for reference</li>
-                      <li>• Balance payment details will be recorded</li>
+                      <li>• Credit Bill #{creditBillNumber} will be created</li>
+                      <li>• Sales entry will be recorded for cash management</li>
+                      {variance !== 0 && <li>• Variance of {formatCurrency(Math.abs(variance))} will be tracked</li>}
+                      {refundAmount > 0 && <li>• Refund of {formatCurrency(refundAmount)} will be processed</li>}
+                      <li>• Order status will change to "DELIVERED"</li>
                       <li>• This action cannot be undone</li>
                     </ul>
                   </div>
@@ -506,16 +622,16 @@ export default function ConvertSalesOrderPage() {
                         Cancel
                       </Button>
                     </Link>
-                    <Button type="submit" disabled={loading || !saleId.trim()}>
+                    <Button type="submit" disabled={loading || !creditBillNumber.trim()}>
                       {loading ? (
                         <>
-                          <Package className="mr-2 h-4 w-4 animate-spin" />
-                          Converting...
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Creating Credit Bill...
                         </>
                       ) : (
                         <>
                           <CheckCircle className="mr-2 h-4 w-4" />
-                          Convert to Sale
+                          Create Credit Bill
                         </>
                       )}
                     </Button>

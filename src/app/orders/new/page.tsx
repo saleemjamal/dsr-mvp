@@ -18,9 +18,11 @@ import Link from "next/link"
 import { createSalesOrder, generateOrderNumber } from "@/lib/sales-orders-service"
 import { createCustomer } from "@/lib/customer-service"
 import { useStore } from "@/contexts/store-context"
+import { useAuth } from "@/hooks/use-auth"
 
 export default function NewOrderPage() {
   const router = useRouter()
+  const { profile } = useAuth()
   const { currentStore, accessibleStores, canAccessMultipleStores } = useStore()
   const [loading, setLoading] = useState(false)
   const [customer, setCustomer] = useState<any>(null)
@@ -133,8 +135,28 @@ export default function NewOrderPage() {
       
       console.log('Order data built:', orderData)
       console.log('About to call createSalesOrder...')
-      await createSalesOrder(orderData)
+      const createdOrder = await createSalesOrder(orderData)
       console.log('createSalesOrder completed successfully')
+      
+      // If advance payment was collected, create cash movement
+      if (advanceAmount > 0 && formData.tender_type) {
+        console.log('Creating cash movement for advance payment...')
+        try {
+          const { createSOAdvanceMovement } = await import('@/lib/cash-service')
+          await createSOAdvanceMovement(
+            formData.store_id,
+            advanceAmount,
+            formData.tender_type,
+            createdOrder.id,
+            profile?.full_name || profile?.email || 'System'
+          )
+          console.log('Cash movement created successfully')
+        } catch (cashError) {
+          console.error('Error creating cash movement:', cashError)
+          // Don't fail the order creation, but warn the user
+          toast.warning('Order created but advance payment tracking failed. Please inform accounts.')
+        }
+      }
       
       toast.success(`Sales order ${formData.order_number.toUpperCase()} created successfully!`)
       

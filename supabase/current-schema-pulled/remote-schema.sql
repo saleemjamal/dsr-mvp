@@ -77,6 +77,10 @@ CREATE TABLE public.cash_transfers (
   petty_cash_balance numeric,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
+  adjustment_type character varying CHECK (adjustment_type IS NULL OR (adjustment_type::text = ANY (ARRAY['initial_setup'::character varying::text, 'correction'::character varying::text, 'injection'::character varying::text, 'loss'::character varying::text]))),
+  account_type character varying DEFAULT 'petty_cash'::character varying CHECK (account_type::text = ANY (ARRAY['sales_cash'::character varying::text, 'petty_cash'::character varying::text])),
+  is_adjustment boolean DEFAULT false,
+  current_balance_snapshot numeric,
   CONSTRAINT cash_transfers_pkey PRIMARY KEY (id),
   CONSTRAINT cash_transfers_store_id_fkey FOREIGN KEY (store_id) REFERENCES public.stores(id)
 );
@@ -115,6 +119,30 @@ CREATE TABLE public.damage_reports (
   CONSTRAINT damage_reports_pkey PRIMARY KEY (id),
   CONSTRAINT damage_reports_store_id_fkey FOREIGN KEY (store_id) REFERENCES public.stores(id)
 );
+CREATE TABLE public.email_whitelist (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  email character varying UNIQUE,
+  domain character varying,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  assigned_role character varying DEFAULT 'cashier'::character varying CHECK (assigned_role::text = ANY (ARRAY['super_user'::character varying::text, 'accounts_incharge'::character varying::text, 'store_manager'::character varying::text, 'cashier'::character varying::text])),
+  assigned_store_ids ARRAY DEFAULT '{}'::uuid[],
+  notes text,
+  added_by uuid,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT email_whitelist_pkey PRIMARY KEY (id),
+  CONSTRAINT email_whitelist_added_by_fkey FOREIGN KEY (added_by) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.expense_categories (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name character varying NOT NULL UNIQUE,
+  description text,
+  is_active boolean DEFAULT true,
+  display_order integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT expense_categories_pkey PRIMARY KEY (id)
+);
 CREATE TABLE public.expenses (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   store_id uuid NOT NULL,
@@ -125,8 +153,15 @@ CREATE TABLE public.expenses (
   voucher_image_url text,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
+  status character varying DEFAULT 'pending'::character varying,
+  reconciled_by uuid,
+  reconciled_at timestamp with time zone,
+  reconciliation_source character varying,
+  reconciliation_notes text,
+  external_reference character varying,
   CONSTRAINT expenses_pkey PRIMARY KEY (id),
-  CONSTRAINT expenses_store_id_fkey FOREIGN KEY (store_id) REFERENCES public.stores(id)
+  CONSTRAINT expenses_store_id_fkey FOREIGN KEY (store_id) REFERENCES public.stores(id),
+  CONSTRAINT expenses_reconciled_by_fkey FOREIGN KEY (reconciled_by) REFERENCES public.user_profiles(id)
 );
 CREATE TABLE public.gift_vouchers (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -141,7 +176,16 @@ CREATE TABLE public.gift_vouchers (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   tender_type character varying CHECK (tender_type::text = ANY (ARRAY['cash'::character varying, 'credit_card'::character varying, 'upi'::character varying, 'gift_voucher'::character varying, 'bank_transfer'::character varying]::text[])),
-  CONSTRAINT gift_vouchers_pkey PRIMARY KEY (id)
+  store_id uuid,
+  notes text,
+  reconciled_by uuid,
+  reconciled_at timestamp with time zone,
+  reconciliation_source character varying,
+  reconciliation_notes text,
+  external_reference character varying,
+  CONSTRAINT gift_vouchers_pkey PRIMARY KEY (id),
+  CONSTRAINT gift_vouchers_store_id_fkey FOREIGN KEY (store_id) REFERENCES public.stores(id),
+  CONSTRAINT gift_vouchers_reconciled_by_fkey FOREIGN KEY (reconciled_by) REFERENCES public.user_profiles(id)
 );
 CREATE TABLE public.hand_bills (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -154,12 +198,17 @@ CREATE TABLE public.hand_bills (
   items_description text,
   image_url text,
   status character varying DEFAULT 'pending'::character varying CHECK (status::text = ANY (ARRAY['pending'::character varying, 'converted'::character varying, 'cancelled'::character varying]::text[])),
-  converted_sale_id uuid,
+  converted_sale_id text,
   notes text,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
+  reconciled_by uuid,
+  reconciled_at timestamp with time zone,
+  reconciliation_source character varying,
+  reconciliation_notes text,
+  external_reference character varying,
   CONSTRAINT hand_bills_pkey PRIMARY KEY (id),
-  CONSTRAINT hand_bills_converted_sale_id_fkey FOREIGN KEY (converted_sale_id) REFERENCES public.sales(id),
+  CONSTRAINT hand_bills_reconciled_by_fkey FOREIGN KEY (reconciled_by) REFERENCES public.user_profiles(id),
   CONSTRAINT hand_bills_store_id_fkey FOREIGN KEY (store_id) REFERENCES public.stores(id)
 );
 CREATE TABLE public.returns (
@@ -174,8 +223,26 @@ CREATE TABLE public.returns (
   notes text,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
+  status character varying DEFAULT 'pending'::character varying,
+  reconciled_by uuid,
+  reconciled_at timestamp with time zone,
+  reconciliation_source character varying,
+  reconciliation_notes text,
+  external_reference character varying,
   CONSTRAINT returns_pkey PRIMARY KEY (id),
+  CONSTRAINT returns_reconciled_by_fkey FOREIGN KEY (reconciled_by) REFERENCES public.user_profiles(id),
   CONSTRAINT returns_store_id_fkey FOREIGN KEY (store_id) REFERENCES public.stores(id)
+);
+CREATE TABLE public.role_permissions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  role character varying NOT NULL,
+  module character varying NOT NULL,
+  action character varying NOT NULL,
+  allowed boolean DEFAULT false,
+  requires_approval boolean DEFAULT false,
+  conditions jsonb DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT role_permissions_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.sales (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -188,14 +255,21 @@ CREATE TABLE public.sales (
   notes text,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
+  status character varying DEFAULT 'pending'::character varying,
+  reconciled_by uuid,
+  reconciled_at timestamp with time zone,
+  reconciliation_source character varying,
+  reconciliation_notes text,
+  external_reference character varying,
   CONSTRAINT sales_pkey PRIMARY KEY (id),
-  CONSTRAINT sales_store_id_fkey FOREIGN KEY (store_id) REFERENCES public.stores(id)
+  CONSTRAINT sales_store_id_fkey FOREIGN KEY (store_id) REFERENCES public.stores(id),
+  CONSTRAINT sales_reconciled_by_fkey FOREIGN KEY (reconciled_by) REFERENCES public.user_profiles(id)
 );
 CREATE TABLE public.sales_orders (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   store_id uuid NOT NULL,
   order_date date NOT NULL DEFAULT CURRENT_DATE,
-  order_number character varying UNIQUE,
+  order_number character varying,
   customer_id uuid,
   customer_name character varying NOT NULL,
   customer_phone character varying,
@@ -209,7 +283,17 @@ CREATE TABLE public.sales_orders (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   tender_type character varying CHECK (tender_type::text = ANY (ARRAY['cash'::character varying, 'credit_card'::character varying, 'upi'::character varying, 'gift_voucher'::character varying, 'bank_transfer'::character varying]::text[])),
+  converted_sale_id text,
+  balance_amount_paid numeric DEFAULT 0,
+  balance_tender_type text,
+  balance_payment_date timestamp without time zone,
+  reconciled_by uuid,
+  reconciled_at timestamp with time zone,
+  reconciliation_source character varying,
+  reconciliation_notes text,
+  external_reference character varying,
   CONSTRAINT sales_orders_pkey PRIMARY KEY (id),
+  CONSTRAINT sales_orders_reconciled_by_fkey FOREIGN KEY (reconciled_by) REFERENCES public.user_profiles(id),
   CONSTRAINT sales_orders_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id),
   CONSTRAINT sales_orders_store_id_fkey FOREIGN KEY (store_id) REFERENCES public.stores(id)
 );
@@ -224,4 +308,45 @@ CREATE TABLE public.stores (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT stores_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.user_profiles (
+  id uuid NOT NULL,
+  email character varying NOT NULL,
+  full_name character varying,
+  role character varying DEFAULT 'cashier'::character varying CHECK (role::text = ANY (ARRAY['super_user'::character varying, 'accounts_incharge'::character varying, 'store_manager'::character varying, 'cashier'::character varying]::text[])),
+  default_store_id uuid,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT user_profiles_default_store_id_fkey FOREIGN KEY (default_store_id) REFERENCES public.stores(id),
+  CONSTRAINT user_profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.user_sessions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  store_id uuid,
+  session_start timestamp with time zone DEFAULT now(),
+  session_end timestamp with time zone,
+  last_activity timestamp with time zone DEFAULT now(),
+  ip_address inet,
+  user_agent text,
+  is_active boolean DEFAULT true,
+  CONSTRAINT user_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT user_sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.user_profiles(id),
+  CONSTRAINT user_sessions_store_id_fkey FOREIGN KEY (store_id) REFERENCES public.stores(id)
+);
+CREATE TABLE public.user_store_access (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  store_id uuid NOT NULL,
+  can_view boolean DEFAULT true,
+  can_edit boolean DEFAULT false,
+  can_approve boolean DEFAULT false,
+  granted_at timestamp with time zone DEFAULT now(),
+  granted_by uuid,
+  CONSTRAINT user_store_access_pkey PRIMARY KEY (id),
+  CONSTRAINT user_store_access_granted_by_fkey FOREIGN KEY (granted_by) REFERENCES public.user_profiles(id),
+  CONSTRAINT user_store_access_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.user_profiles(id),
+  CONSTRAINT user_store_access_store_id_fkey FOREIGN KEY (store_id) REFERENCES public.stores(id)
 );

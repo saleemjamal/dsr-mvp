@@ -15,7 +15,7 @@ import Link from "next/link"
 import { format } from "date-fns"
 import { useAuth } from "@/hooks/use-auth"
 import { useStore } from "@/contexts/store-context"
-import { calculateExpectedCashAmount, getCashSummary, getLatestCashCount } from "@/lib/cash-service"
+import { calculateExpectedCashAmount, getCashSummary, getLatestCashCount, getCurrentAccountBalance, getCashActivityHistory, type CashActivity } from "@/lib/cash-service"
 import { toast } from "sonner"
 
 interface CashData {
@@ -86,7 +86,7 @@ export default function CashManagementPage() {
     storeId: null
   })
   const [cashData, setCashData] = useState<CashData | null>(null)
-  const [cashHistory, setCashHistory] = useState(mockCashHistory)
+  const [cashHistory, setCashHistory] = useState<CashActivity[]>([])
 
   // Load cash management data when filters change
   useEffect(() => {
@@ -97,13 +97,43 @@ export default function CashManagementPage() {
         setLoading(true)
         const date = format(filters.dateRange.to, 'yyyy-MM-dd') // Use 'to' date for counting day
         
-        // Use current store or first accessible store
-        const storeId = currentStore?.id || accessibleStores[0]?.id
+        // Check if a specific store is selected
+        const storeId = filters.storeId || currentStore?.id
+        
+        // If "All Stores" is selected or no store available, show placeholder
         if (!storeId) {
-          throw new Error('No store selected')
+          setCashData({
+            salesCash: {
+              expected: 0,
+              actual: 0,
+              variance: 0,
+              lastCounted: undefined
+            },
+            pettyCash: {
+              balance: 0,
+              expected: 0,
+              actual: 0,
+              variance: 0,
+              lastCounted: undefined,
+              lowThreshold: 2000
+            },
+            todayTransactions: {
+              cashSales: 0,
+              cashAdvances: 0,
+              cashTransfers: 0,
+              deposits: 0
+            }
+          })
+          setCashHistory([])
+          setLoading(false)
+          return
         }
 
-        // Calculate expected amounts
+        // Get current account balances (includes all adjustments)
+        const salesCurrentBalance = await getCurrentAccountBalance(storeId, 'sales_cash')
+        const pettyCurrentBalance = await getCurrentAccountBalance(storeId, 'petty_cash')
+        
+        // Calculate expected amounts for variance calculation
         const salesExpected = await calculateExpectedCashAmount(storeId, 'sales_cash', date)
         const pettyExpected = await calculateExpectedCashAmount(storeId, 'petty_cash', date)
 
@@ -116,16 +146,16 @@ export default function CashManagementPage() {
 
         const newCashData: CashData = {
           salesCash: {
-            expected: salesExpected,
+            expected: salesCurrentBalance, // Use current balance (includes adjustments)
             actual: salesActual,
-            variance: salesActual - salesExpected,
+            variance: salesCount ? salesActual - salesCurrentBalance : 0, // Only show variance if counted
             lastCounted: salesCount?.counted_at
           },
           pettyCash: {
-            balance: pettyActual,
-            expected: pettyExpected,
+            balance: pettyCurrentBalance, // Use current balance (includes adjustments)
+            expected: pettyCurrentBalance, 
             actual: pettyActual,
-            variance: pettyActual - pettyExpected,
+            variance: pettyCount ? pettyActual - pettyCurrentBalance : 0, // Only show variance if counted
             lastCounted: pettyCount?.counted_at,
             lowThreshold: 2000
           },
@@ -138,9 +168,11 @@ export default function CashManagementPage() {
         }
 
         setCashData(newCashData)
-        setCashHistory(mockCashHistory) // Keep mock history for now
+        
+        // Load real cash activity history
+        const activityHistory = await getCashActivityHistory(storeId, filters.dateRange)
+        setCashHistory(activityHistory)
       } catch (error) {
-        console.error('Error loading cash management data:', error)
         toast.error('Failed to load cash management data')
       } finally {
         setLoading(false)
@@ -222,8 +254,24 @@ export default function CashManagementPage() {
             showDateFilter={true}
           />
 
+          {/* Show message when All Stores is selected */}
+          {!loading && filters && !filters.storeId && !currentStore?.id && (
+            <Card className="mb-8">
+              <CardContent className="flex items-center justify-center py-8">
+                <div className="text-center">
+                  <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+                  <p className="text-lg font-medium mb-2">Please select a specific store</p>
+                  <p className="text-sm text-muted-foreground">
+                    Cash management requires a specific store to be selected. 
+                    Use the store filter above to choose a store.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Cash Status Cards */}
-          {!loading && filters && cashData && (
+          {!loading && filters && cashData && (filters.storeId || currentStore?.id) && (
           <div className="grid gap-4 md:grid-cols-4 mb-8">
             
             {/* Critical Variance Alert */}
@@ -394,20 +442,25 @@ export default function CashManagementPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {mockCashHistory.map((activity) => (
+                    {cashHistory.map((activity) => (
                       <TableRow key={activity.id}>
                         <TableCell>
                           <Badge variant={
                             activity.type === 'sales_count' ? 'default' :
-                            activity.type === 'petty_count' ? 'secondary' : 'outline'
+                            activity.type === 'petty_count' ? 'secondary' :
+                            activity.type === 'adjustment' ? 'success' : 'outline'
                           }>
                             {activity.type === 'sales_count' ? 'Sales Count' :
-                             activity.type === 'petty_count' ? 'Petty Count' : 'Transfer'}
+                             activity.type === 'petty_count' ? 'Petty Count' :
+                             activity.type === 'adjustment' ? `Adjustment (${activity.adjustmentType})` : 
+                             'Transfer'}
                           </Badge>
                         </TableCell>
                         <TableCell>
                           {activity.type === 'transfer' ? (
                             <span className="capitalize">{activity.from} → {activity.to}</span>
+                          ) : activity.type === 'adjustment' ? (
+                            <span className="capitalize">{activity.accountType} Account</span>
                           ) : (
                             <span>
                               {activity.expected ? `Expected: ${formatCurrency(activity.expected)}` : 'Balance Count'}

@@ -401,7 +401,7 @@ export default function ApprovalsPage() {
                                 </Button>
                                 <Button onClick={() => {
                                   const amount = parseFloat(approvalData.approvedAmount)
-                                  const finalAmount = adjustment.adjustment_type === 'loss' ? -Math.abs(amount) : Math.abs(amount)
+                                  const finalAmount = Math.abs(amount) // Always keep positive
                                   handleApproval(adjustment.id!, 'approve', finalAmount, true)
                                 }}>
                                   Approve Modified Amount

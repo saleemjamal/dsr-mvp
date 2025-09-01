@@ -22,10 +22,12 @@ import {
   type CashAdjustment 
 } from "@/lib/cash-service"
 import { useAuth } from "@/hooks/use-auth"
+import { useStore } from "@/contexts/store-context"
 
 export default function CashAdjustmentPage() {
   const router = useRouter()
   const { profile } = useAuth()
+  const { currentStore, accessibleStores } = useStore()
   const [loading, setLoading] = useState(false)
   const [initialLoading, setInitialLoading] = useState(false)
   const [storeId, setStoreId] = useState<string>("")
@@ -43,7 +45,13 @@ export default function CashAdjustmentPage() {
     const loadInitialData = async () => {
       try {
         setInitialLoading(true)
-        const store = await getDefaultStore()
+        
+        // Use current store from context first, fallback to getDefaultStore
+        let store = currentStore
+        if (!store) {
+          store = await getDefaultStore()
+        }
+        
         if (!store) {
           toast.error('No store found. Please contact administrator.')
           return
@@ -54,7 +62,6 @@ export default function CashAdjustmentPage() {
         const balance = await getCurrentAccountBalance(store.id, formData.accountType)
         setCurrentBalance(balance)
       } catch (error) {
-        console.error('Error loading initial data:', error)
         toast.error('Failed to load store information')
       } finally {
         setInitialLoading(false)
@@ -62,14 +69,14 @@ export default function CashAdjustmentPage() {
     }
 
     loadInitialData()
-  }, [])
+  }, [currentStore])
 
   // Reload balance when account type changes
   useEffect(() => {
     if (storeId) {
       getCurrentAccountBalance(storeId, formData.accountType)
         .then(balance => setCurrentBalance(balance))
-        .catch(error => console.error('Error loading balance:', error))
+        .catch(() => setCurrentBalance(0))
     }
   }, [formData.accountType, storeId])
 
@@ -161,7 +168,6 @@ export default function CashAdjustmentPage() {
       }, 1000)
       
     } catch (error: any) {
-      console.error('Error submitting adjustment request:', error)
       toast.error(error.message || 'Failed to submit adjustment request')
     } finally {
       setLoading(false)

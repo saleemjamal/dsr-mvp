@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ArrowLeft, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
+import { format } from "date-fns"
 import { createMultipleSales } from "@/lib/sales-service"
 import { useAuth } from "@/hooks/use-auth"
 import { useStore } from "@/contexts/store-context"
@@ -34,7 +35,8 @@ export default function NewSalePage() {
   const [formData, setFormData] = useState({
     store_id: currentStore?.id || '',
     tenderAmounts: {} as Record<string, string>, // Store amounts for each tender type
-    notes: ''
+    notes: '',
+    sale_date: new Date()
   })
 
   // Set initial store when currentStore or accessibleStores change
@@ -78,7 +80,7 @@ export default function NewSalePage() {
           amount: parseFloat(amount),
           tender_type: tenderType,
           notes: formData.notes,
-          sale_date: new Date().toISOString().split('T')[0]
+          sale_date: format(formData.sale_date, 'yyyy-MM-dd')
         }))
 
       // Save to database
@@ -91,7 +93,8 @@ export default function NewSalePage() {
       setFormData({
         store_id: '',
         tenderAmounts: {},
-        notes: ''
+        notes: '',
+        sale_date: new Date()
       })
       
       // Redirect to sales page
@@ -235,18 +238,25 @@ export default function NewSalePage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Date (Auto-filled) */}
-                    <div className="space-y-2">
-                      <Label htmlFor="date">Date</Label>
-                      <Input
-                        id="date"
-                        type="text"
-                        value={new Date().toLocaleDateString('en-IN')}
-                        disabled
-                        className="h-12 bg-muted"
-                      />
-                    </div>
+                  {/* Date Selection - Simple HTML date input for all devices */}
+                  <div className="space-y-2">
+                    <Label htmlFor="sale-date">Sale Date</Label>
+                    <Input
+                      id="sale-date"
+                      type="date"
+                      value={format(formData.sale_date, 'yyyy-MM-dd')}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        if (value) {
+                          // Parse the date string properly to avoid timezone issues
+                          const [year, month, day] = value.split('-').map(Number)
+                          const date = new Date(year, month - 1, day) // month is 0-indexed in JS Date
+                          setFormData(prev => ({ ...prev, sale_date: date }))
+                        }
+                      }}
+                      className="h-12 max-w-sm"
+                      max={format(new Date(), 'yyyy-MM-dd')} // Prevent future dates
+                    />
                   </div>
 
                   {/* Notes */}

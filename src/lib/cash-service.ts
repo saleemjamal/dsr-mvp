@@ -153,18 +153,35 @@ export async function approveTransfer(
   approvedAmount: number, 
   approvalNotes?: string
 ) {
-  const { error } = await supabase
+  // Get the current user's profile to get their name
+  const { data: { user } } = await supabase.auth.getUser()
+  const { data: profiles } = await supabase
+    .from('user_profiles')
+    .select('full_name, email')
+    .eq('id', user?.id)
+  
+  const profile = profiles && profiles.length > 0 ? profiles[0] : null
+  const approverName = profile?.full_name || profile?.email || 'Unknown Approver'
+  
+  // Ensure we have a valid approver name
+  const validApproverName = approverName || 'Unknown Approver'
+  
+  // Approving transfer
+  
+  const { data, error } = await supabase
     .from('cash_transfers')
     .update({
       status: 'approved',
       approved_amount: approvedAmount,
       approval_notes: approvalNotes,
-      approved_by: (await supabase.auth.getUser()).data.user?.id,
+      approved_by: validApproverName,
       approval_date: new Date().toISOString()
     })
     .eq('id', transferId)
 
-  if (error) throw error
+  if (error) {
+    throw new Error(`Failed to approve transfer: ${error.message} - ${error.details || ''}`)
+  }
   
   return {
     id: transferId,
@@ -175,12 +192,22 @@ export async function approveTransfer(
 }
 
 export async function rejectTransfer(transferId: string, rejectionNotes: string) {
+  // Get the current user's profile to get their name
+  const { data: { user } } = await supabase.auth.getUser()
+  const { data: profiles } = await supabase
+    .from('user_profiles')
+    .select('full_name, email')
+    .eq('id', user?.id)
+  
+  const profile = profiles && profiles.length > 0 ? profiles[0] : null
+  const approverName = profile?.full_name || profile?.email || 'Unknown Approver'
+  
   const { error } = await supabase
     .from('cash_transfers')
     .update({
       status: 'rejected',
       approval_notes: rejectionNotes,
-      approved_by: (await supabase.auth.getUser()).data.user?.id,
+      approved_by: approverName,
       approval_date: new Date().toISOString()
     })
     .eq('id', transferId)
@@ -256,7 +283,6 @@ export async function calculateExpectedCashAmount(
       return await calculatePettyCashExpected(storeId, fromTime, toTime)
     }
   } catch (error) {
-    console.error('Error calculating expected cash amount:', error)
     return 0
   }
 }
@@ -334,7 +360,6 @@ async function calculateSalesCashExpected(storeId: string, fromTime: string, cur
     return Math.max(0, total) // Sales cash cannot be negative
 
   } catch (error) {
-    console.error('Error calculating sales cash expected:', error)
     return 0
   }
 }
@@ -376,7 +401,6 @@ async function calculatePettyCashExpected(storeId: string, fromTime: string, toT
     return Math.max(0, openingBalance + transfersIn - totalExpenses)
 
   } catch (error) {
-    console.error('Error calculating petty cash expected:', error)
     return 0
   }
 }
@@ -412,7 +436,6 @@ export async function getCashSummary(storeId: string) {
       pendingTransfers: pendingTransfers || []
     }
   } catch (error) {
-    console.error('Error getting cash summary:', error)
     throw error
   }
 }
@@ -454,10 +477,8 @@ export async function createAdjustmentRequest(adjustment: Omit<CashAdjustment, '
       ...adjustment,
       is_adjustment: true,
       current_balance_snapshot: balanceData || 0,
-      // Ensure loss adjustments are negative
-      requested_amount: adjustment.adjustment_type === 'loss' 
-        ? -Math.abs(adjustment.requested_amount)
-        : Math.abs(adjustment.requested_amount)
+      // Always keep amounts positive - adjustment_type determines direction
+      requested_amount: Math.abs(adjustment.requested_amount)
     }])
     .select()
 
@@ -517,6 +538,136 @@ export async function getAdjustmentAudit(storeId?: string) {
   return data
 }
 
+export interface CashActivity {
+  id: string
+  date: string
+  type: 'sales_count' | 'petty_count' | 'adjustment' | 'transfer'
+  actual?: number
+  expected?: number
+  variance?: number
+  countedBy?: string
+  adjustmentType?: string
+  accountType?: string
+  amount?: number
+  approvedBy?: string
+  status?: string
+  from?: string
+  to?: string
+  timestamp: string
+}
+
+export async function getCashActivityHistory(storeId: string, dateRange?: { from: Date, to: Date }): Promise<CashActivity[]> {
+  try {
+    // Get cash counts
+    const countsQuery = supabase
+      .from('cash_counts')
+      .select('*')
+      .eq('store_id', storeId)
+      .order('counted_at', { ascending: false })
+      .limit(10)
+    
+    if (dateRange) {
+      countsQuery
+        .gte('count_date', dateRange.from.toISOString().split('T')[0])
+        .lte('count_date', dateRange.to.toISOString().split('T')[0])
+    }
+    
+    // Get cash transfers and adjustments
+    const transfersQuery = supabase
+      .from('cash_transfers')
+      .select('*')
+      .eq('store_id', storeId)
+      .in('status', ['approved', 'completed'])
+      .order('approval_date', { ascending: false })
+      .limit(10)
+    
+    if (dateRange) {
+      transfersQuery
+        .gte('approval_date', dateRange.from.toISOString())
+        .lte('approval_date', dateRange.to.toISOString())
+    }
+    
+    const [counts, transfers] = await Promise.all([
+      countsQuery,
+      transfersQuery
+    ])
+    
+    // Combine and format the results
+    const activities: CashActivity[] = []
+    
+    // Add counts
+    if (counts.data) {
+      counts.data.forEach(count => {
+        activities.push({
+          id: count.id,
+          date: count.count_date,
+          type: count.count_type === 'sales_drawer' ? 'sales_count' : 'petty_count',
+          actual: count.total_counted,
+          expected: count.expected_amount,
+          variance: count.variance,
+          countedBy: count.counted_by,
+          timestamp: new Date(count.counted_at).toLocaleTimeString('en-IN', { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: true 
+          })
+        })
+      })
+    }
+    
+    // Add transfers and adjustments
+    if (transfers.data) {
+      transfers.data.forEach(transfer => {
+        if (transfer.is_adjustment) {
+          activities.push({
+            id: transfer.id,
+            date: transfer.approval_date?.split('T')[0] || transfer.request_date?.split('T')[0],
+            type: 'adjustment',
+            adjustmentType: transfer.adjustment_type,
+            accountType: transfer.account_type,
+            amount: transfer.approved_amount || transfer.requested_amount,
+            approvedBy: transfer.approved_by,
+            status: transfer.status,
+            timestamp: transfer.approval_date ? 
+              new Date(transfer.approval_date).toLocaleTimeString('en-IN', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+              }) : 'Pending'
+          })
+        } else {
+          activities.push({
+            id: transfer.id,
+            date: transfer.approval_date?.split('T')[0] || transfer.request_date?.split('T')[0],
+            type: 'transfer',
+            from: 'sales',
+            to: 'petty',
+            amount: transfer.approved_amount || transfer.requested_amount,
+            approvedBy: transfer.approved_by,
+            timestamp: transfer.approval_date ? 
+              new Date(transfer.approval_date).toLocaleTimeString('en-IN', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+              }) : 'Pending'
+          })
+        }
+      })
+    }
+    
+    // Sort by date and time (most recent first)
+    activities.sort((a, b) => {
+      const dateA = new Date(`${a.date} ${a.timestamp}`)
+      const dateB = new Date(`${b.date} ${b.timestamp}`)
+      return dateB.getTime() - dateA.getTime()
+    })
+    
+    return activities.slice(0, 10) // Return top 10 most recent
+  } catch (error) {
+    return []
+  }
+}
+
 export async function getCurrentAccountBalance(storeId: string, accountType: 'sales_cash' | 'petty_cash') {
   const { data, error } = await supabase
     .rpc('get_current_cash_balance', {
@@ -529,20 +680,84 @@ export async function getCurrentAccountBalance(storeId: string, accountType: 'sa
 }
 
 // ==========================================
-// STORES (temporary until proper auth)
+// STORES
 // ==========================================
 
 export async function getDefaultStore() {
-  const { data, error } = await supabase
+  // First, get the current user
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    throw new Error('No authenticated user')
+  }
+
+  // Get the user's profile with their default store
+  const { data: profiles } = await supabase
+    .from('user_profiles')
+    .select(`
+      *,
+      default_store:stores!user_profiles_default_store_id_fkey(*)
+    `)
+    .eq('id', user.id)
+  
+  const profile = profiles && profiles.length > 0 ? profiles[0] : null
+  
+  if (profile?.default_store) {
+    // Return user's default store if set
+    return profile.default_store
+  }
+  
+  // Otherwise, get the first store the user has access to
+  const { data: storeAccess } = await supabase
+    .from('user_store_access')
+    .select(`
+      store:stores!user_store_access_store_id_fkey(*)
+    `)
+    .eq('user_id', user.id)
+    .eq('can_view', true)
+  
+  if (storeAccess && storeAccess.length > 0 && storeAccess[0].store) {
+    return storeAccess[0].store
+  }
+  
+  // Last fallback: get any active store (for backwards compatibility)
+  // This should ideally never be reached
+  const { data: stores } = await supabase
     .from('stores')
     .select('*')
     .eq('is_active', true)
-
-  if (error && error.code !== 'PGRST116') throw error
+    .limit(1)
   
-  if (!data || data.length === 0) {
-    return null
+  if (stores && stores.length > 0) {
+    // User has no default store or store access. Returning first active store.
+    return stores[0]
   }
   
-  return data[0]
+  return null
+}
+
+// ==========================================
+// SALES ORDER ADVANCE MOVEMENTS
+// ==========================================
+
+export async function createSOAdvanceMovement(
+  storeId: string,
+  amount: number,
+  tenderType: string,
+  soId: string,
+  createdBy: string = 'System'
+) {
+  const { data, error } = await supabase.rpc('create_so_advance_movement', {
+    p_store_id: storeId,
+    p_amount: amount,
+    p_tender_type: tenderType,
+    p_reference_id: soId,
+    p_created_by: createdBy
+  })
+
+  if (error) {
+    console.error('Error creating SO advance movement:', error)
+    throw new Error(`Failed to record advance payment: ${error.message}`)
+  }
+
+  return data
 }

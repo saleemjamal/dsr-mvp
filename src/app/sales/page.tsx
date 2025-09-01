@@ -33,6 +33,9 @@ interface SaleWithStore {
   notes?: string
   status?: string
   created_at?: string
+  sale_type?: 'regular' | 'credit_bill'
+  reference_type?: 'sales_order' | 'hand_bill' | null
+  reference_id?: string
   stores: {
     store_name: string
     store_code: string
@@ -316,8 +319,17 @@ export default function SalesPage() {
                                 {sale.tender_type.replace('_', ' ').toUpperCase()}
                               </Badge>
                             </TableCell>
-                            <TableCell className="max-w-[200px] truncate">
-                              {sale.notes || '-'}
+                            <TableCell className="max-w-[200px]">
+                              <div className="flex items-center gap-2">
+                                {sale.sale_type === 'credit_bill' && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    Credit Bill
+                                  </Badge>
+                                )}
+                                <span className="truncate">
+                                  {sale.notes || '-'}
+                                </span>
+                              </div>
                             </TableCell>
                             <TableCell>
                               {sale.created_at ? new Date(sale.created_at).toLocaleTimeString('en-IN', {
