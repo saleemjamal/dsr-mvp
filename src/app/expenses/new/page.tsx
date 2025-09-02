@@ -13,9 +13,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { SmartCameraCapture } from "@/components/ui/smart-camera-capture"
 import { CapturedPhoto } from "@/components/ui/mobile-camera-input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ArrowLeft, Loader2, Camera, Receipt, Plus, Trash2, Image } from "lucide-react"
+import { ArrowLeft, Loader2, Camera, Receipt, Plus, Trash2, Image, Calendar } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
+import { format } from "date-fns"
 import { getActiveStores, type Store } from "@/lib/sales-service"
 import { getActiveExpenseCategories, createBatchExpenses, type ExpenseCategory, type Expense } from "@/lib/expense-service"
 import { uploadImage, generateImagePath } from "@/lib/storage-service"
@@ -39,6 +40,7 @@ export default function NewExpensePage() {
   const [showCamera, setShowCamera] = useState(false)
   const [cameraRowId, setCameraRowId] = useState<string>("")
   const [storeId, setStoreId] = useState("")
+  const [expenseDate, setExpenseDate] = useState(new Date())
   const [expenses, setExpenses] = useState<ExpenseRow[]>([
     { id: '1', category: '', amount: '', description: '', imageData: null }
   ])
@@ -175,7 +177,7 @@ export default function NewExpensePage() {
 
         return {
           store_id: storeId,
-          expense_date: new Date().toISOString().split('T')[0],
+          expense_date: format(expenseDate, 'yyyy-MM-dd'),
           category: expense.category,
           amount: parseFloat(expense.amount),
           description: expense.description || '',
@@ -266,30 +268,54 @@ export default function NewExpensePage() {
           <div className="max-w-6xl">
             <form onSubmit={handleSubmit} className="space-y-6">
               
-              {/* Store Selection */}
+              {/* Store and Date Selection */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Store Selection</CardTitle>
-                  <CardDescription>Select the store for these expenses</CardDescription>
+                  <CardTitle>Expense Details</CardTitle>
+                  <CardDescription>Select the store and date for these expenses</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="max-w-md">
-                    <Label htmlFor="store">Store *</Label>
-                    <Select 
-                      value={storeId} 
-                      onValueChange={setStoreId}
-                    >
-                      <SelectTrigger id="store" className="h-12" disabled={loadingData}>
-                        <SelectValue placeholder={loadingData ? "Loading..." : "Select store"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {getUsableStores().map((store) => (
-                          <SelectItem key={store.id} value={store.id}>
-                            {store.store_name} ({store.store_code})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <Label htmlFor="store">Store *</Label>
+                      <Select 
+                        value={storeId} 
+                        onValueChange={setStoreId}
+                      >
+                        <SelectTrigger id="store" className="h-12" disabled={loadingData}>
+                          <SelectValue placeholder={loadingData ? "Loading..." : "Select store"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {getUsableStores().map((store) => (
+                            <SelectItem key={store.id} value={store.id}>
+                              {store.store_name} ({store.store_code})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div>
+                      <Label htmlFor="expense_date">Expense Date *</Label>
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="expense_date"
+                          type="date"
+                          value={format(expenseDate, 'yyyy-MM-dd')}
+                          onChange={(e) => {
+                            const date = e.target.value ? new Date(e.target.value + 'T00:00:00') : new Date()
+                            setExpenseDate(date)
+                          }}
+                          className="pl-10 h-12"
+                          max={format(new Date(), 'yyyy-MM-dd')}
+                          required
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        You can record expenses for previous dates
+                      </p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
