@@ -4,7 +4,7 @@ import { getExpensesForDateRange } from './expense-service'
 import { getVouchersForDateRange } from './gift-vouchers-service'
 import { getHandBillsForDateRange } from './hand-bills-service'
 import { getReturnsForDateRange } from './returns-service'
-import { calculateExpectedCashAmount, getLatestCashCount } from './cash-service'
+import { calculateExpectedCashAmount, getLatestCashCount, getCurrentAccountBalance } from './cash-service'
 import { supabase } from './supabase'
 
 export interface DashboardData {
@@ -12,7 +12,12 @@ export interface DashboardData {
   totalExpenses: number
   totalHandBills: number
   totalReturns: number
-  netPosition: number
+  
+  // Cash Positions (replacing netPosition)
+  salesCashBalance: number  // Current sales cash (actual if counted, else expected)
+  pettyCashBalance: number  // Current petty cash (actual if counted, else expected)
+  pendingDepositAmount: number  // Amount pending to be deposited
+  todayExpenses: number  // Today's expenses from petty cash
   
   // Cash Management
   cashVariance: number
@@ -97,15 +102,28 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
     // Get pending approvals count
     const pendingApprovals = await getPendingApprovalsCount(storeIds)
     
-    // Net position calculation 
-    const netPosition = totalSales + totalHandBills - totalExpenses - totalReturns
+    // Calculate today's expenses total
+    const todayExpenses = (expensesData || []).reduce((sum, expense) => sum + expense.amount, 0)
+    
+    // Get pending deposit amount (sales cash that needs to be deposited)
+    const pendingDepositAmount = await getPendingDepositAmount(storeIds)
+    
+    // Use actual balance (which already has the correct current balance)
+    // The 'actual' values are either counted amounts or current balance if not counted
+    const salesCashBalance = cashVarianceData.salesCashActual
+    const pettyCashBalance = cashVarianceData.pettyCashActual
     
     return {
       totalSales,
       totalExpenses,
       totalHandBills,
       totalReturns,
-      netPosition,
+      
+      // New cash position fields
+      salesCashBalance,
+      pettyCashBalance,
+      pendingDepositAmount,
+      todayExpenses,
       
       // Cash variance data
       cashVariance: cashVarianceData.totalVariance,
@@ -152,29 +170,33 @@ async function getCashVarianceForStores(storeIds: string[] | null, date: string)
   // Calculate variance for each store and sum them up
   for (const storeId of storeIds) {
     try {
-      // Get expected amounts
-      const salesExpected = await calculateExpectedCashAmount(storeId, 'sales_cash', date)
-      const pettyExpected = await calculateExpectedCashAmount(storeId, 'petty_cash', date)
+      // Get current account balances (this includes all adjustments and is more accurate)
+      const salesCurrentBalance = await getCurrentAccountBalance(storeId, 'sales_cash')
+      const pettyCurrentBalance = await getCurrentAccountBalance(storeId, 'petty_cash')
       
-      // Get latest counts
+      // Get latest counts for actual amounts
       const salesCount = await getLatestCashCount(storeId, 'sales_drawer')
       const pettyCount = await getLatestCashCount(storeId, 'petty_cash')
       
       const salesActualAmount = salesCount?.total_counted || 0
       const pettyActualAmount = pettyCount?.total_counted || 0
       
-      // Add to totals
-      salesCashExpected += salesExpected
-      salesCashActual += salesActualAmount
-      pettyCashExpected += pettyExpected
-      pettyCashActual += pettyActualAmount
+      // Use current balance as expected (includes all adjustments)
+      salesCashExpected += salesCurrentBalance
+      salesCashActual += salesActualAmount || salesCurrentBalance // Use current if no count
+      pettyCashExpected += pettyCurrentBalance
+      pettyCashActual += pettyActualAmount || pettyCurrentBalance // Use current if no count
       
       // Calculate variance for this store
-      const storeVariance = (salesActualAmount - salesExpected) + (pettyActualAmount - pettyExpected)
+      const salesVariance = salesActualAmount ? (salesActualAmount - salesCurrentBalance) : 0
+      const pettyVariance = pettyActualAmount ? (pettyActualAmount - pettyCurrentBalance) : 0
+      const storeVariance = salesVariance + pettyVariance
       totalVariance += storeVariance
       
       // Check for low cash alert (petty cash below ₹2000)
-      if (pettyActualAmount < 2000) {
+      // Use actual if counted, otherwise use current balance
+      const effectivePettyBalance = pettyActualAmount || pettyCurrentBalance
+      if (effectivePettyBalance < 2000) {
         lowCashAlert = true
       }
     } catch (error) {
@@ -196,6 +218,31 @@ async function getPendingApprovalsCount(storeIds: string[] | null): Promise<numb
   // This would check for pending approvals across different modules
   // For now, return 0 - can be implemented based on specific approval workflows
   return 0
+}
+
+async function getPendingDepositAmount(storeIds: string[] | null): Promise<number> {
+  if (!storeIds || storeIds.length === 0) return 0
+  
+  try {
+    // Query daily_cash_positions for pending deposits
+    const { data, error } = await supabase
+      .from('daily_cash_positions')
+      .select('closing_balance')
+      .in('store_id', storeIds)
+      .eq('deposit_status', 'pending')
+      .gt('closing_balance', 0)
+    
+    if (error) {
+      console.error('Error fetching pending deposits:', error)
+      return 0
+    }
+    
+    // Sum all pending deposit amounts
+    return (data || []).reduce((sum, record) => sum + (record.closing_balance || 0), 0)
+  } catch (error) {
+    console.error('Error calculating pending deposits:', error)
+    return 0
+  }
 }
 
 // Helper function for date range queries

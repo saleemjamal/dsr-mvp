@@ -161,6 +161,11 @@ ALTER TABLE public.daily_cash_positions
 ADD COLUMN IF NOT EXISTS petty_cash_expenses DECIMAL(12,2) DEFAULT 0;
 
 -- 5. Update the generated closing_balance column to include petty expenses
+-- First drop dependent views
+DROP VIEW IF EXISTS pending_deposits_summary CASCADE;
+DROP VIEW IF EXISTS daily_cash_flow CASCADE;
+
+-- Now we can safely modify the column
 ALTER TABLE public.daily_cash_positions
 DROP COLUMN IF EXISTS closing_balance;
 
@@ -178,6 +183,48 @@ ADD COLUMN closing_balance DECIMAL(12,2) GENERATED ALWAYS AS (
   - COALESCE(petty_transfers_out, 0) 
   - COALESCE(cash_deposits, 0)
 ) STORED;
+
+-- Recreate the views with correct structure
+CREATE OR REPLACE VIEW public.pending_deposits_summary AS
+SELECT 
+  dcp.store_id,
+  s.store_name,
+  s.store_code,
+  MIN(dcp.business_date) as oldest_pending_date,
+  MAX(dcp.business_date) as latest_pending_date,
+  COUNT(*) as days_pending,
+  SUM(dcp.closing_balance) as total_pending_amount,
+  MAX(CURRENT_DATE - dcp.business_date) as oldest_days_ago,
+  ARRAY_AGG(
+    json_build_object(
+      'date', dcp.business_date,
+      'amount', dcp.closing_balance,
+      'is_holiday', dcp.is_bank_holiday
+    ) ORDER BY dcp.business_date
+  ) as daily_breakdown
+FROM public.daily_cash_positions dcp
+JOIN public.stores s ON s.id = dcp.store_id
+WHERE dcp.deposit_status = 'pending'
+  AND dcp.closing_balance > 0
+GROUP BY dcp.store_id, s.store_name, s.store_code;
+
+CREATE OR REPLACE VIEW public.daily_cash_flow AS
+SELECT 
+  dcp.*,
+  COALESCE(dcp.counted_amount, dcp.closing_balance) as effective_balance,
+  CASE 
+    WHEN dcp.deposit_status = 'pending' AND (CURRENT_DATE - dcp.business_date) > 3 
+    THEN 'overdue'
+    WHEN dcp.deposit_status = 'pending' AND (CURRENT_DATE - dcp.business_date) = 3 
+    THEN 'due_today'
+    WHEN dcp.deposit_status = 'pending' 
+    THEN 'accumulating'
+    ELSE dcp.deposit_status
+  END as deposit_urgency,
+  s.store_name,
+  s.store_code
+FROM public.daily_cash_positions dcp
+JOIN public.stores s ON s.id = dcp.store_id;
 
 -- 6. Create petty_cash_positions table for tracking petty cash separately
 CREATE TABLE IF NOT EXISTS public.petty_cash_positions (

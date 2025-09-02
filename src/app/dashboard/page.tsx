@@ -10,7 +10,7 @@ import { Header } from "@/components/layout/header"
 import { FilterBar, type FilterState } from "@/components/ui/filter-bar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { DollarSign, TrendingUp, AlertTriangle, Gift, Loader2, Calculator, Receipt, ArrowUpDown, Users } from "lucide-react"
+import { DollarSign, TrendingUp, AlertTriangle, Gift, Loader2, Calculator, Receipt, ArrowUpDown, Users, Banknote } from "lucide-react"
 import { format } from "date-fns"
 import { getDashboardData, type DashboardData } from "@/lib/dashboard-service"
 import { toast } from "sonner"
@@ -37,7 +37,10 @@ export default function Dashboard() {
     totalExpenses: 0,
     totalHandBills: 0,
     totalReturns: 0,
-    netPosition: 0,
+    salesCashBalance: 0,
+    pettyCashBalance: 0,
+    pendingDepositAmount: 0,
+    todayExpenses: 0,
     cashVariance: 0,
     salesCashExpected: 0,
     salesCashActual: 0,
@@ -233,38 +236,46 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
               
-              <Card className={`overflow-hidden border-0 shadow-lg ${dashboardData.netPosition >= 0 ? 'dark:glow-success' : 'dark:glow-danger'}`}>
-                <div className={`h-2 ${dashboardData.netPosition >= 0 ? 'gradient-success dark:gradient-subtle-green' : 'bg-gradient-to-r from-red-500 to-red-600'}`}></div>
+              <Card className="overflow-hidden border-0 shadow-lg">
+                <div className="gradient-info dark:gradient-subtle-blue h-2"></div>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Net Position</CardTitle>
-                  <div className={`rounded-full p-2 ${dashboardData.netPosition >= 0 ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
-                    <TrendingUp className={`h-4 w-4 ${dashboardData.netPosition >= 0 ? 'text-success' : 'text-red-500'}`} />
+                  <CardTitle className="text-sm font-medium">Sales Cash</CardTitle>
+                  <div className="rounded-full bg-blue-100 dark:bg-blue-900/30 p-2">
+                    <DollarSign className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className={`text-2xl font-bold ${dashboardData.netPosition >= 0 ? 'text-cash-positive' : 'text-cash-negative'}`}>
-                    {formatCurrency(dashboardData.netPosition)}
+                  <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">
+                    {formatCurrency(dashboardData.salesCashBalance)}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Including hand bills & returns
+                    {dashboardData.pendingDepositAmount > 0 
+                      ? `Pending deposit: ${formatCurrency(dashboardData.pendingDepositAmount)}`
+                      : 'Customer transactions'}
                   </p>
                 </CardContent>
               </Card>
               
-              <Card className={`overflow-hidden border-0 shadow-lg ${Math.abs(dashboardData.cashVariance) >= 500 ? 'dark:glow-danger border-red-200 dark:border-red-800' : Math.abs(dashboardData.cashVariance) > 150 ? 'dark:glow-warning border-orange-200 dark:border-orange-800' : 'dark:glow-success'}`}>
-                <div className={`h-2 ${Math.abs(dashboardData.cashVariance) >= 500 ? 'bg-gradient-to-r from-red-500 to-red-600' : Math.abs(dashboardData.cashVariance) > 150 ? 'gradient-warning' : 'gradient-success'}`}></div>
+              <Card className={`overflow-hidden border-0 shadow-lg ${dashboardData.pettyCashBalance < 500 ? 'dark:glow-danger' : dashboardData.pettyCashBalance < 2000 ? 'dark:glow-warning' : ''}`}>
+                <div className={`h-2 ${dashboardData.pettyCashBalance < 500 ? 'bg-gradient-to-r from-red-500 to-red-600' : dashboardData.pettyCashBalance < 2000 ? 'gradient-warning' : 'gradient-success'}`}></div>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Cash Variance</CardTitle>
-                  <div className={`rounded-full p-2 ${Math.abs(dashboardData.cashVariance) >= 500 ? 'bg-red-100 dark:bg-red-900/30' : Math.abs(dashboardData.cashVariance) > 150 ? 'bg-orange-100 dark:bg-orange-900/30' : 'bg-green-100 dark:bg-green-900/30'}`}>
-                    <Calculator className={`h-4 w-4 ${Math.abs(dashboardData.cashVariance) >= 500 ? 'text-cash-negative' : Math.abs(dashboardData.cashVariance) > 150 ? 'text-warning' : 'text-cash-positive'}`} />
+                  <CardTitle className="text-sm font-medium">Petty Cash</CardTitle>
+                  <div className={`rounded-full p-2 ${dashboardData.pettyCashBalance < 500 ? 'bg-red-100 dark:bg-red-900/30' : dashboardData.pettyCashBalance < 2000 ? 'bg-orange-100 dark:bg-orange-900/30' : 'bg-green-100 dark:bg-green-900/30'}`}>
+                    <Banknote className={`h-4 w-4 ${dashboardData.pettyCashBalance < 500 ? 'text-red-600' : dashboardData.pettyCashBalance < 2000 ? 'text-orange-600' : 'text-green-600'}`} />
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className={`text-2xl font-bold ${Math.abs(dashboardData.cashVariance) >= 500 ? 'text-cash-negative' : Math.abs(dashboardData.cashVariance) > 150 ? 'text-warning' : 'text-cash-positive'}`}>
-                    {formatCurrency(dashboardData.cashVariance)}
+                  <div className={`text-2xl font-bold ${dashboardData.pettyCashBalance < 500 ? 'text-red-700 dark:text-red-400' : dashboardData.pettyCashBalance < 2000 ? 'text-orange-700 dark:text-orange-400' : 'text-green-700 dark:text-green-400'}`}>
+                    {formatCurrency(dashboardData.pettyCashBalance)}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {dashboardData.lowCashAlert ? 'Low petty cash alert' : 'Expected vs actual'}
+                    {dashboardData.pettyCashBalance < 500 
+                      ? 'Critical - Request transfer urgently'
+                      : dashboardData.pettyCashBalance < 2000 
+                      ? 'Low - Request transfer soon'
+                      : dashboardData.todayExpenses > 0
+                      ? `Today's expenses: ${formatCurrency(dashboardData.todayExpenses)}`
+                      : 'Expense funds'}
                   </p>
                 </CardContent>
               </Card>
@@ -317,17 +328,21 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
 
-              <Card className="overflow-hidden border-0 shadow-md hover:shadow-lg transition-shadow">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 bg-gradient-to-br from-purple-50 to-white dark:from-purple-900/20 dark:to-transparent">
-                  <CardTitle className="text-sm font-medium">Transactions</CardTitle>
-                  <div className="rounded-full bg-purple-100 dark:bg-purple-900/30 p-2">
-                    <Users className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+              <Card className={`overflow-hidden border-0 shadow-md hover:shadow-lg transition-shadow ${Math.abs(dashboardData.cashVariance) >= 500 ? 'border-red-200 dark:border-red-800' : ''}`}>
+                <CardHeader className={`flex flex-row items-center justify-between space-y-0 pb-2 bg-gradient-to-br ${Math.abs(dashboardData.cashVariance) >= 500 ? 'from-red-50 to-white dark:from-red-900/20' : Math.abs(dashboardData.cashVariance) > 150 ? 'from-orange-50 to-white dark:from-orange-900/20' : 'from-green-50 to-white dark:from-green-900/20'} dark:to-transparent`}>
+                  <CardTitle className="text-sm font-medium">Cash Variance</CardTitle>
+                  <div className={`rounded-full p-2 ${Math.abs(dashboardData.cashVariance) >= 500 ? 'bg-red-100 dark:bg-red-900/30' : Math.abs(dashboardData.cashVariance) > 150 ? 'bg-orange-100 dark:bg-orange-900/30' : 'bg-green-100 dark:bg-green-900/30'}`}>
+                    <Calculator className={`h-4 w-4 ${Math.abs(dashboardData.cashVariance) >= 500 ? 'text-red-600 dark:text-red-400' : Math.abs(dashboardData.cashVariance) > 150 ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}`} />
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-purple-700 dark:text-purple-400">{dashboardData.totalTransactions}</div>
+                  <div className={`text-2xl font-bold ${Math.abs(dashboardData.cashVariance) >= 500 ? 'text-red-700 dark:text-red-400' : Math.abs(dashboardData.cashVariance) > 150 ? 'text-orange-700 dark:text-orange-400' : 'text-green-700 dark:text-green-400'}`}>
+                    {formatCurrency(dashboardData.cashVariance)}
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    Avg: {formatCurrency(dashboardData.averageTransactionValue)}
+                    {Math.abs(dashboardData.cashVariance) >= 500 ? 'Critical - Investigate immediately' : 
+                     Math.abs(dashboardData.cashVariance) > 150 ? 'Warning - Review counts' : 
+                     'Within acceptable range'}
                   </p>
                 </CardContent>
               </Card>
