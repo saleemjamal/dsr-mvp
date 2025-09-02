@@ -761,3 +761,94 @@ export async function createSOAdvanceMovement(
 
   return data
 }
+
+// ==========================================
+// CASH DEPOSITS
+// ==========================================
+
+export interface CashDeposit {
+  id?: string
+  store_id: string
+  deposit_date: string
+  amount: number
+  deposit_slip_number: string
+  bank_name: string
+  deposited_by: string
+  deposited_at?: string
+  notes?: string
+  cash_count_id?: string
+}
+
+export async function createCashDeposit(params: {
+  storeId: string
+  amount: number
+  depositSlipNumber: string
+  bankName: string
+  notes?: string
+  depositedBy: string
+}) {
+  const { data: countData } = await supabase
+    .from('cash_counts')
+    .select('id')
+    .eq('store_id', params.storeId)
+    .eq('count_type', 'sales_drawer')
+    .order('counted_at', { ascending: false })
+    .limit(1)
+
+  const cashCountId = countData?.[0]?.id
+
+  // Create deposit record
+  const { data: depositData, error: depositError } = await supabase
+    .from('cash_deposits')
+    .insert([{
+      store_id: params.storeId,
+      deposit_date: new Date().toISOString().split('T')[0],
+      amount: params.amount,
+      deposit_slip_number: params.depositSlipNumber,
+      bank_name: params.bankName,
+      deposited_by: params.depositedBy,
+      deposited_at: new Date().toISOString(),
+      notes: params.notes,
+      cash_count_id: cashCountId
+    }])
+    .select()
+
+  if (depositError) throw depositError
+
+  // Create cash movement to reset sales cash to zero
+  const { error: movementError } = await supabase
+    .from('cash_movements')
+    .insert([{
+      store_id: params.storeId,
+      movement_date: new Date().toISOString().split('T')[0],
+      movement_type: 'deposit',
+      account_type: 'sales_cash',
+      amount: -params.amount, // Negative to reduce balance
+      reference_type: 'deposit',
+      reference_id: depositData[0].id,
+      description: `Bank deposit - ${params.depositSlipNumber}`,
+      created_by: params.depositedBy
+    }])
+
+  if (movementError) throw movementError
+
+  return depositData[0]
+}
+
+export async function getCashDeposits(storeId: string, dateRange?: { from: Date; to: Date }) {
+  let query = supabase
+    .from('cash_deposits')
+    .select('*')
+    .eq('store_id', storeId)
+    .order('deposited_at', { ascending: false })
+
+  if (dateRange) {
+    const fromDate = dateRange.from.toISOString().split('T')[0]
+    const toDate = dateRange.to.toISOString().split('T')[0]
+    query = query.gte('deposit_date', fromDate).lte('deposit_date', toDate)
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+  return data as CashDeposit[]
+}

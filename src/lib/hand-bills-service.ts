@@ -55,7 +55,24 @@ export async function createHandBill(handBill: Omit<HandBill, 'id' | 'created_at
     throw new Error('Failed to create hand bill - no data returned')
   }
   
-  return data[0]
+  const createdHandBill = data[0]
+  
+  // Create cash movement if tender type is cash
+  if (handBill.tender_type?.toLowerCase() === 'cash' && handBill.store_id) {
+    try {
+      await supabase.rpc('create_hb_cash_movement', {
+        p_store_id: handBill.store_id,
+        p_amount: handBill.total_amount,
+        p_reference_id: createdHandBill.id,
+        p_bill_number: createdHandBill.bill_number || ''
+      })
+    } catch (movementError) {
+      console.error('Error creating cash movement for Hand Bill:', movementError)
+      // Don't fail the Hand Bill creation if movement fails
+    }
+  }
+  
+  return createdHandBill
 }
 
 export async function getHandBillsForDate(storeId: string, date: string): Promise<HandBillSummary[]> {

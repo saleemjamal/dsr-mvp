@@ -252,22 +252,24 @@ export function FilterBar({
                 value={filters.storeId || "all"} 
                 onValueChange={handleStoreChange}
               >
-                <SelectTrigger className="w-full lg:w-[250px]">
+                <SelectTrigger className="w-full lg:w-[300px]">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="w-[350px]">
                   <SelectItem value="all">
-                    <div className="flex items-center gap-2">
-                      <Building className="h-4 w-4" />
+                    <div className="flex items-center gap-2 w-full">
+                      <Building className="h-4 w-4 flex-shrink-0" />
                       <span>All Stores</span>
                     </div>
                   </SelectItem>
                   {accessibleStores.map((store) => (
                     <SelectItem key={store.id} value={store.id}>
-                      <div className="flex items-center gap-2">
-                        <Building className="h-4 w-4" />
-                        <span className="truncate">{store.store_name}</span>
-                        <Badge variant="outline" className="text-xs flex-shrink-0">
+                      <div className="flex items-center gap-2 w-full">
+                        <Building className="h-4 w-4 flex-shrink-0" />
+                        <span className="truncate flex-1 max-w-[220px]" title={store.store_name}>
+                          {store.store_name}
+                        </span>
+                        <Badge variant="outline" className="text-xs flex-shrink-0 ml-auto">
                           {store.store_code}
                         </Badge>
                       </div>

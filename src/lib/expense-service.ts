@@ -55,7 +55,23 @@ export async function createExpense(expense: Omit<Expense, 'id' | 'created_at' |
     throw new Error('Failed to create expense - no data returned')
   }
   
-  return data[0]
+  const createdExpense = data[0]
+  
+  // Create cash movement to reduce petty cash
+  try {
+    await supabase.rpc('create_expense_cash_movement', {
+      p_store_id: expense.store_id,
+      p_amount: expense.amount,
+      p_reference_id: createdExpense.id,
+      p_category: expense.category,
+      p_description: expense.description
+    })
+  } catch (movementError) {
+    console.error('Error creating cash movement for expense:', movementError)
+    // Don't fail the expense creation if movement fails
+  }
+  
+  return createdExpense
 }
 
 export async function createBatchExpenses(expenses: Omit<Expense, 'id' | 'created_at' | 'updated_at'>[]) {
@@ -71,6 +87,30 @@ export async function createBatchExpenses(expenses: Omit<Expense, 'id' | 'create
   
   if (!data || data.length === 0) {
     throw new Error('Failed to create expenses - no data returned')
+  }
+  
+  // Create cash movements for each expense to reduce petty cash
+  for (const createdExpense of data) {
+    const originalExpense = expenses.find(e => 
+      e.category === createdExpense.category && 
+      e.amount === createdExpense.amount &&
+      e.description === createdExpense.description
+    )
+    
+    if (originalExpense) {
+      try {
+        await supabase.rpc('create_expense_cash_movement', {
+          p_store_id: originalExpense.store_id,
+          p_amount: originalExpense.amount,
+          p_reference_id: createdExpense.id,
+          p_category: originalExpense.category,
+          p_description: originalExpense.description
+        })
+      } catch (movementError) {
+        console.error('Error creating cash movement for batch expense:', movementError)
+        // Don't fail the batch if movement fails
+      }
+    }
   }
   
   return data as Expense[]

@@ -49,7 +49,24 @@ export async function createReturn(returnData: Omit<Return, 'id' | 'created_at' 
     throw new Error('Failed to create return - no data returned')
   }
   
-  return data[0]
+  const createdReturn = data[0]
+  
+  // Create cash movement if refund method is cash (negative amount for refund)
+  if (returnData.refund_method?.toLowerCase() === 'cash' && returnData.store_id) {
+    try {
+      await supabase.rpc('create_return_cash_movement', {
+        p_store_id: returnData.store_id,
+        p_amount: returnData.return_amount,
+        p_reference_id: createdReturn.id,
+        p_bill_reference: returnData.original_bill_reference
+      })
+    } catch (movementError) {
+      console.error('Error creating cash movement for Return:', movementError)
+      // Don't fail the Return creation if movement fails
+    }
+  }
+  
+  return createdReturn
 }
 
 export async function getReturnsForDate(storeId: string, date: string): Promise<ReturnSummary[]> {

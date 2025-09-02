@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Calculator, IndianRupee, TrendingUp, TrendingDown, Clock, CheckCircle, AlertTriangle, Plus, ArrowRight, Loader2 } from "lucide-react"
+import { Calculator, IndianRupee, TrendingUp, TrendingDown, Clock, CheckCircle, AlertTriangle, Plus, ArrowRight, Loader2, Banknote } from "lucide-react"
 import Link from "next/link"
 import { format } from "date-fns"
 import { useAuth } from "@/hooks/use-auth"
@@ -236,6 +236,12 @@ export default function CashManagementPage() {
                 <Button>
                   <Plus className="mr-2 h-4 w-4" />
                   Count Cash
+                </Button>
+              </Link>
+              <Link href="/cash-management/deposit-multi">
+                <Button variant="outline">
+                  <IndianRupee className="mr-2 h-4 w-4" />
+                  Record Deposit
                 </Button>
               </Link>
               <Link href="/cash-management/transfers">

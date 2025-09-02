@@ -122,6 +122,9 @@
 - [ ] Test order creation with customer lookup
 - [ ] Test advance payment processing
 - [ ] Verify delivery status tracking
+- [ ] Test SO to Credit Bill conversion workflow
+- [ ] Verify variance calculation and audit trail
+- [ ] Test balance payment and refund scenarios
 
 ### Customer Management ✅
 - [x] Connect customer lookup to database
@@ -130,6 +133,19 @@
 - [ ] Verify phone number validation and uniqueness
 
 ## Testing & QA
+- [ ] **Cash Management Testing**
+  - [ ] Test cash deposit recording with validation
+  - [ ] Verify deposit can only happen after cash count
+  - [ ] Test deposit slip number and bank details recording
+  - [ ] Verify sales cash resets to zero after deposit
+  - [ ] Test deposit audit trail and cash count linkage
+- [ ] **Credit Bills Testing**
+  - [ ] Test SO to Credit Bill conversion
+  - [ ] Verify variance calculations (increase/decrease/no change)
+  - [ ] Test refund processing when final amount is less
+  - [ ] Verify audit trail creation with all variance details
+  - [ ] Test Credit Bill number generation
+  - [ ] Verify cash movements for advances and balances
 - [ ] **Comprehensive FilterBar Testing**
   - [ ] Test store filtering for AIC users across all modules
   - [ ] Test role-based access (SM/Cashier should not see store filter)

@@ -41,7 +41,7 @@ export interface VoucherTransaction {
 // GIFT VOUCHER MANAGEMENT
 // ==========================================
 
-export async function createGiftVoucher(voucher: Omit<GiftVoucher, 'id' | 'created_at' | 'updated_at'>) {
+export async function createGiftVoucher(voucher: Omit<GiftVoucher, 'id' | 'created_at' | 'updated_at'> & { store_id?: string; tender_type?: string }) {
   const defaultExpiryDate = new Date()
   defaultExpiryDate.setFullYear(defaultExpiryDate.getFullYear() + 2) // 2 years validity
 
@@ -67,7 +67,24 @@ export async function createGiftVoucher(voucher: Omit<GiftVoucher, 'id' | 'creat
     throw new Error('Failed to create gift voucher - no data returned')
   }
   
-  return data[0]
+  const createdVoucher = data[0]
+  
+  // Create cash movement if tender type is cash
+  if (voucher.tender_type?.toLowerCase() === 'cash' && voucher.store_id) {
+    try {
+      await supabase.rpc('create_gv_cash_movement', {
+        p_store_id: voucher.store_id,
+        p_amount: voucher.amount,
+        p_reference_id: createdVoucher.id,
+        p_voucher_number: createdVoucher.voucher_number
+      })
+    } catch (movementError) {
+      console.error('Error creating cash movement for GV:', movementError)
+      // Don't fail the GV creation if movement fails
+    }
+  }
+  
+  return createdVoucher
 }
 
 export async function getVoucherByNumber(voucherNumber: string): Promise<GiftVoucher | null> {
