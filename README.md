@@ -1,5 +1,14 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Environment Setup
+
+1. Copy the environment example file:
+```bash
+cp .env.local.example .env.local
+```
+
+2. Configure your environment variables in `.env.local` (see GoFrugal Integration Setup below)
+
 ## Getting Started
 
 First, run the development server:
@@ -28,6 +37,73 @@ To learn more about Next.js, take a look at the following resources:
 - [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## GoFrugal Integration Setup
+
+### Required Environment Variables
+
+Configure the following in your `.env.local` file:
+
+#### Essential Configuration
+- `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Your Supabase anonymous key
+
+#### GoFrugal API Configuration
+- `GOFRUGAL_LICENSE_KEY`: Your GoFrugal license key (X-Auth-Token)
+- `GOFRUGAL_BASE_URL`: Your HQ server URL (e.g., `http://192.168.1.100`)
+- `GOFRUGAL_HQ_PATH`: Your HQ path (typically `/RayMedi_HQ` or `/WebReporter`)
+
+### Feature Flags
+
+Control feature rollout using these environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `NEXT_PUBLIC_ENABLE_GOFRUGAL` | Main toggle for all GoFrugal features | `false` |
+| `NEXT_PUBLIC_ENABLE_VARIANCE_BADGES` | Show variance indicators in UI | `false` |
+| `NEXT_PUBLIC_ENABLE_SYNC_UI` | Enable sync management pages | `false` |
+| `NEXT_PUBLIC_ENABLE_ITEMS_SYNC` | Enable product synchronization | `false` |
+| `NEXT_PUBLIC_ENABLE_CUSTOMER_SYNC` | Enable customer synchronization | `false` |
+| `NEXT_PUBLIC_ENABLE_LOYALTY` | Enable loyalty points sync | `false` |
+
+### Gradual Rollout Strategy
+
+1. **Start with everything disabled:**
+   ```
+   NEXT_PUBLIC_ENABLE_GOFRUGAL=false
+   ```
+
+2. **Test with specific stores:**
+   ```
+   ENABLED_STORES=store-id-1,store-id-2
+   ```
+
+3. **Percentage-based rollout:**
+   ```
+   ROLLOUT_PERCENTAGE=10  # Enable for 10% of stores
+   ```
+
+4. **Full rollout:**
+   ```
+   NEXT_PUBLIC_ENABLE_GOFRUGAL=true
+   ROLLOUT_PERCENTAGE=100
+   ```
+
+### Performance Tuning
+
+Adjust these settings based on your infrastructure:
+
+- `GOFRUGAL_SYNC_BATCH_SIZE`: Records per batch (default: 100)
+- `GOFRUGAL_SYNC_TIMEOUT`: API timeout in ms (default: 30000)
+- `GOFRUGAL_MAX_RETRIES`: Retry attempts (default: 3)
+- `GOFRUGAL_RATE_LIMIT_PER_HOUR`: Max API calls/hour (default: 1000)
+
+### Security Notes
+
+- Never commit `.env.local` to version control
+- Keep `GOFRUGAL_LICENSE_KEY` server-side only
+- Rotate `CRON_SECRET` regularly
+- Use strong, unique values for all secrets
 
 ## Deploy on Vercel
 
